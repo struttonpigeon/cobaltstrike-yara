@@ -17,11 +17,9 @@
 
 ## What This Is
 
-IM DOING THIS BECAUSE MY INTERNAL RED TEAM IS GRIEFING ME
+This document was inspired by my wonderful internal red team who should really use the Artifact Kit more ;)
 
-WHY CANT YALL JUST USE THE ARTIFACT KIT LIKE NORMAL PEOPLE???
-
-Alright, so i got that out of my system now. This is a curated set of YARA rules that detect **Cobalt Strike** artifacts across every stage of the attack chain. Should cover initial shellcode stagers through in-memory beacon configurations. Each rule is heavily commented, explaining exactly which bytes are matched and why, making this useful both as a detection toolset and a learning resource.
+This is a curated set of YARA rules that detect **Cobalt Strike** artifacts across every stage of the attack chain. Should cover initial shellcode stagers through in-memory beacon configurations. Each rule is heavily commented, explaining exactly which bytes are matched and why, making this useful both as a detection toolset and a learning resource.
 
 These rules target default and lightly customised CS deployments (versions 3.x through 4.x), which still account for the majority of Cobalt Strike usage observed in the wild.
 
