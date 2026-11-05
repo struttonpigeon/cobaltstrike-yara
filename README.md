@@ -17,11 +17,13 @@
 
 ## What This Is
 
-Born out of frustration with an internal red team that insists on running default Cobalt Strike without even basic obfuscation. If your red team does the same, these rules are for you.
+This document was inspired by my wonderful internal red team who should really use the Artifact Kit more ;)
 
-This is a curated set of YARA rules that detect **Cobalt Strike** artifacts across every stage of the attack chain — from initial shellcode stagers through in-memory beacon configurations. Each rule is heavily commented, explaining exactly which bytes are matched and why, making this useful both as a detection toolset and a learning resource.
+This is a curated set of YARA rules that detect **Cobalt Strike** artifacts across every stage of the attack chain. Should cover initial shellcode stagers through in-memory beacon configurations. Each rule is heavily commented, explaining exactly which bytes are matched and why, making this useful both as a detection toolset and a learning resource.
 
-These rules target default and lightly customised CS deployments (versions 3.x through 4.x). Operators using Artifact Kit, UDRL, or Sleep Mask Kit modifications will evade many of these signatures — see [Limitations](#limitations--evasion) below.
+These rules target default and lightly customised CS deployments (versions 3.x through 4.x), which still account for the majority of Cobalt Strike usage observed in the wild. Operators using Artifact Kit, UDRL, or Sleep Mask Kit modifications will evade many of these signatures — see [Limitations](#limitations--evasion) below.
+
+For those of you whose red team uses CS without obfuscation... COUGH COUGH this is for you.
 
 ## Quick Start
 
