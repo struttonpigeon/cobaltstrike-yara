@@ -3,6 +3,7 @@
 # Cobalt Strike YARA Rule Pack
 
 **22 detection rules for Cobalt Strike loaders, beacons, and post-exploitation artifacts**
+
 IM DOING THIS BECAUSE MY INTERNAL RED TEAM IS GRIEFING ME
 
 [![YARA](https://img.shields.io/badge/YARA-4.x-blue?style=flat-square)](https://virustotal.github.io/yara/)
