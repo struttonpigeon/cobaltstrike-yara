@@ -1,3 +1,5 @@
+import "pe"
+
 /*
     Cobalt Strike — Reflective DLL Loader Detection
     Author:      struttonpigeon
@@ -17,14 +19,21 @@
          legitimate imports, specific PE header values).
 */
 
+private rule IsPE
+{
+    condition:
+        uint16(0) == 0x5A4D and uint32(uint32(0x3C)) == 0x00004550
+}
+
 rule CobaltStrike_ReflectiveLoader_Export
 {
     meta:
-        description = "Detects the ReflectiveLoader export name in a PE — the entry point for reflective injection"
+        description = "ReflectiveLoader export in a PE — shared with Metasploit and other RDI-based tools, not CS-specific"
         author      = "struttonpigeon"
         date        = "2026-11-05"
         reference   = "https://github.com/stephenfewer/ReflectiveDLLInjection"
-        severity    = "critical"
+        shared_with = "Metasploit, any tool using Stephen Fewer's RDI"
+        severity    = "medium"
         tlp         = "white"
 
     strings:
@@ -37,20 +46,24 @@ rule CobaltStrike_ReflectiveLoader_Export
         $export_wide  = "ReflectiveLoader" wide fullword
 
     condition:
-        uint16(0) == 0x5A4D and    // MZ header
+        IsPE and
         filesize < 5MB and
-        any of ($export_*)
+        (
+            pe.exports("ReflectiveLoader") or
+            any of ($export_*)
+        )
 }
 
 
 rule CobaltStrike_ReflectiveLoader_Code
 {
     meta:
-        description = "Reflective loader PE-parsing code patterns — header walking and relocation logic"
+        description = "Generic reflective loader PE-parsing patterns — shared with packers, injectors, and JIT engines"
         author      = "struttonpigeon"
         date        = "2026-11-05"
         reference   = "https://www.mandiant.com/resources/defining-cobalt-strike-components"
-        severity    = "critical"
+        shared_with = "Metasploit, packers, other PE injectors"
+        severity    = "medium"
         tlp         = "white"
 
     strings:
@@ -100,7 +113,7 @@ rule CobaltStrike_ReflectiveLoader_Code
 rule CobaltStrike_Beacon_DLL_Characteristics
 {
     meta:
-        description = "Cobalt Strike beacon DLL — characteristic PE header values and minimal imports"
+        description = "Beacon DLL characteristics — beacon.dll string variants with DllMain return stub"
         author      = "struttonpigeon"
         date        = "2026-11-05"
         reference   = "https://blog.didierstevens.com/2021/11/12/cobalt-strike-understanding-payloads/"
@@ -109,34 +122,26 @@ rule CobaltStrike_Beacon_DLL_Characteristics
 
     strings:
         /*
-            Beacon DLLs often contain the string ".cobaltstrike" or
-            "beacon" in section names, resource data, or config blocks.
+            Beacon DLLs contain "beacon.dll" or variant strings in
+            resource data or config blocks.
             Operators can strip these, but default builds keep them.
         */
-        $cs_str1 = ".cobaltstrike" ascii nocase
-        $cs_str2 = "beacon.dll" ascii nocase
-        $cs_str3 = "beacon.x64.dll" ascii nocase
-        $cs_str4 = "beacon.x86.dll" ascii nocase
-
-        /*
-            Default mutex pattern — some CS versions create a mutex
-            with this naming convention:
-        */
-        $mutex = "MSCTF.Asm." ascii
+        $cs_str1 = "beacon.dll" ascii nocase
+        $cs_str2 = "beacon.x64.dll" ascii nocase
+        $cs_str3 = "beacon.x86.dll" ascii nocase
 
         /*
             The DLL entry point often just calls a single function and
             returns TRUE.  This pattern catches the boilerplate:
             B8 01 00 00 00      MOV EAX, 1
             C2 0C 00            RET 0Ch    ; stdcall DllMain(3 args)
+            NOTE: This stub is generic MSVC boilerplate and requires
+            at least one $cs_str match to be meaningful.
         */
         $dllmain_ret = { B8 01 00 00 00 C2 0C 00 }
 
     condition:
-        uint16(0) == 0x5A4D and
+        IsPE and
         filesize < 5MB and
-        (
-            any of ($cs_str*) or
-            ($mutex and $dllmain_ret)
-        )
+        any of ($cs_str*) and $dllmain_ret
 }

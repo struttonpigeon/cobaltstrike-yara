@@ -16,9 +16,10 @@
     Legitimate red-team engagements use unique per-license watermarks that
     these rules will not match — reducing false positives on authorised use.
 
-    Config setting layout for watermark:
+    Config setting TLV layout for watermark:
         00 25   — setting ID (Watermark)
         00 02   — data type (int, 4 bytes)
+        00 04   — length (4 bytes)
         XX XX XX XX — the watermark value (big-endian)
 */
 
@@ -34,40 +35,24 @@ rule CobaltStrike_Watermark_Cracked_Common
 
     strings:
         /*
-            Watermark 0 — the earliest cracked builds zero out the license.
-            Decoded config bytes: 00 25 00 02 00 00 00 00
+            Watermark 0 — the trial/unlicensed value.  Present in
+            evaluation builds and some early cracked copies.
+            Decoded config bytes: 00 25 00 02 00 04 00 00 00 00
         */
-        $wm_zero = { 00 25 00 02 00 00 00 00 }
+        $wm_zero = { 00 25 00 02 00 04 00 00 00 00 }
 
         /*
             Watermark 305419896 (0x12345678) — the most widely observed
             watermark from cracked CS 4.x builds circulated on underground
-            forums.  Decoded config bytes: 00 25 00 02 12 34 56 78
+            forums.  Decoded config bytes: 00 25 00 02 00 04 12 34 56 78
         */
-        $wm_12345678 = { 00 25 00 02 12 34 56 78 }
+        $wm_12345678 = { 00 25 00 02 00 04 12 34 56 78 }
 
         /*
-            Watermark 1359593325 (0x5109BF6D) — from a different leaked build.
+            Watermark 1359593325 (0x5109BF6D) — from a different leaked build,
+            widely cited in public watermark lists.
         */
-        $wm_5109bf6d = { 00 25 00 02 51 09 BF 6D }
-
-        /*
-            Watermark 1580103824 (0x5E2B1010) — observed in multiple
-            APT campaigns using cracked CS.
-        */
-        $wm_5e2b1010 = { 00 25 00 02 5E 2B 10 10 }
-
-        /*
-            Watermark 674054187 (0x2831B52B) — another frequently observed
-            cracked-build watermark in threat intel reports.
-        */
-        $wm_2831b52b = { 00 25 00 02 28 31 B5 2B }
-
-        /*
-            Watermark 391144938 (0x174F7E6A) — seen in Southeast Asian
-            APT campaigns.
-        */
-        $wm_174f7e6a = { 00 25 00 02 17 4F 7E 6A }
+        $wm_5109bf6d = { 00 25 00 02 00 04 51 09 BF 6D }
 
     condition:
         filesize < 5MB and
@@ -89,19 +74,16 @@ rule CobaltStrike_Watermark_XOR69
         /*
             The same watermark setting bytes XOR'd with 0x69:
 
-            Original:  00 25 00 02 XX XX XX XX
-            XOR 0x69:  69 4C 69 6B YY YY YY YY
-
-            Watermark 0x00000000 XOR 0x69 = 69 69 69 69
-            Watermark 0x12345678 XOR 0x69 = 7B 5D 3F 11
+            Original:  00 25 00 02 00 04 XX XX XX XX
+            XOR 0x69:  69 4C 69 6B 69 6D YY YY YY YY
         */
-        $wm_zero_xor69     = { 69 4C 69 6B 69 69 69 69 }
-        $wm_12345678_xor69 = { 69 4C 69 6B 7B 5D 3F 11 }
-        $wm_5109bf6d_xor69 = { 69 4C 69 6B 38 60 D6 04 }
+        $wm_zero_xor69     = { 69 4C 69 6B 69 6D 69 69 69 69 }
+        $wm_12345678_xor69 = { 69 4C 69 6B 69 6D 7B 5D 3F 11 }
+        $wm_5109bf6d_xor69 = { 69 4C 69 6B 69 6D 38 60 D6 04 }
 
     condition:
         filesize < 5MB and
-        any of ($wm_*_xor69)
+        any of ($wm_*)
 }
 
 
@@ -117,18 +99,16 @@ rule CobaltStrike_Watermark_XOR2E
 
     strings:
         /*
-            Original:  00 25 00 02 XX XX XX XX
-            XOR 0x2E:  2E 0B 2E 2C YY YY YY YY
-
-            Watermark 0x00000000 XOR 0x2E = 2E 2E 2E 2E
-            Watermark 0x12345678 XOR 0x2E = 3C 1A 78 56
+            Original:  00 25 00 02 00 04 XX XX XX XX
+            XOR 0x2E:  2E 0B 2E 2C 2E 2A YY YY YY YY
         */
-        $wm_zero_xor2e     = { 2E 0B 2E 2C 2E 2E 2E 2E }
-        $wm_12345678_xor2e = { 2E 0B 2E 2C 3C 1A 78 56 }
+        $wm_zero_xor2e     = { 2E 0B 2E 2C 2E 2A 2E 2E 2E 2E }
+        $wm_12345678_xor2e = { 2E 0B 2E 2C 2E 2A 3C 1A 78 56 }
+        $wm_5109bf6d_xor2e = { 2E 0B 2E 2C 2E 2A 7F 27 91 43 }
 
     condition:
         filesize < 5MB and
-        any of ($wm_*_xor2e)
+        any of ($wm_*)
 }
 
 
@@ -145,23 +125,23 @@ rule CobaltStrike_Watermark_Setting_Present
     strings:
         /*
             The watermark setting header in a decoded config.
-            Setting 0x0025, type 0x0002 (int), followed by any 4-byte value.
+            Setting 0x0025, type 0x0002 (int), length 0x0004.
             This matches ALL watermarks, not just known-cracked ones.
             Lower severity — useful for hunting, not alerting.
         */
-        $wm_header = { 00 25 00 02 }
+        $wm_header = { 00 25 00 02 00 04 }
 
         /*
             Require at least one other beacon config setting nearby
             to reduce false positives on random byte matches.
-            Setting 0x0001 = BeaconType
+            Setting 0x0001 = BeaconType (short, length 2)
         */
-        $beacon_type = { 00 01 00 01 }
+        $beacon_type = { 00 01 00 01 00 02 }
 
         /*
-            Setting 0x0003 = SleepTime
+            Setting 0x0003 = SleepTime (int, length 4)
         */
-        $sleep_time = { 00 03 00 02 }
+        $sleep_time = { 00 03 00 02 00 04 }
 
     condition:
         filesize < 5MB and
