@@ -4,10 +4,6 @@
 
 **22 detection rules for Cobalt Strike loaders, beacons, and post-exploitation artifacts**
 
-IM DOING THIS BECAUSE MY INTERNAL RED TEAM IS GRIEFING ME
-
-WHY CANT YALL JUST USE THE ARTIFACT KIT LIKE NORMAL PEOPLE???
-
 [![YARA](https://img.shields.io/badge/YARA-4.x-blue?style=flat-square)](https://virustotal.github.io/yara/)
 [![Rules](https://img.shields.io/badge/rules-22-green?style=flat-square)](#rule-inventory)
 [![CS Version](https://img.shields.io/badge/Cobalt%20Strike-3.x--4.x-red?style=flat-square)](#)
@@ -21,11 +17,15 @@ WHY CANT YALL JUST USE THE ARTIFACT KIT LIKE NORMAL PEOPLE???
 
 ## What This Is
 
-A curated set of YARA rules that detect **Cobalt Strike** artifacts across every stage of the attack chain — from initial shellcode stagers through in-memory beacon configurations. Each rule is heavily commented, explaining exactly which bytes are matched and why, making this useful both as a **detection toolset** and a **learning resource**.
+IM DOING THIS BECAUSE MY INTERNAL RED TEAM IS GRIEFING ME
 
-These rules target **default and lightly customised** CS deployments (versions 3.x through 4.x), which still account for the majority of Cobalt Strike usage observed in the wild.
+WHY CANT YALL JUST USE THE ARTIFACT KIT LIKE NORMAL PEOPLE???
 
-For those of you whose red team uses CS without obfuscation... this is for you.
+Alright, so i got that out of my system now. This is a curated set of YARA rules that detect **Cobalt Strike** artifacts across every stage of the attack chain. Should cover initial shellcode stagers through in-memory beacon configurations. Each rule is heavily commented, explaining exactly which bytes are matched and why, making this useful both as a detection toolset and a learning resource.
+
+These rules target default and lightly customised CS deployments (versions 3.x through 4.x), which still account for the majority of Cobalt Strike usage observed in the wild.
+
+For those of you whose red team uses CS without obfuscation... COUGH COUGH this is for you.
 
 ## Quick Start
 
