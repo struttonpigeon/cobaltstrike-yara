@@ -1,0 +1,18 @@
+# Compiled YARA rules
+*.yarc
+
+# Sample malware files — never commit live samples
+samples/*.bin
+samples/*.exe
+samples/*.dll
+samples/*.zip
+samples/*.7z
+
+# OS and editor artifacts
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
