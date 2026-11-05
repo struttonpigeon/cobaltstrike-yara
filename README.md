@@ -21,7 +21,7 @@ A curated set of YARA rules that detect **Cobalt Strike** artifacts across every
 
 These rules target **default and lightly customised** CS deployments (versions 3.x through 4.x), which still account for the majority of Cobalt Strike usage observed in the wild.
 
-For those of you whos red team uses CS without obfuscation... this is for you.
+For those of you whose red team uses CS without obfuscation... this is for you.
 
 ## Quick Start
 
