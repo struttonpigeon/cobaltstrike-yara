@@ -6,6 +6,8 @@
 
 IM DOING THIS BECAUSE MY INTERNAL RED TEAM IS GRIEFING ME
 
+WHY CANT YALL JUST USE THE ARTIFACT KIT LIKE NORMAL PEOPLE???
+
 [![YARA](https://img.shields.io/badge/YARA-4.x-blue?style=flat-square)](https://virustotal.github.io/yara/)
 [![Rules](https://img.shields.io/badge/rules-22-green?style=flat-square)](#rule-inventory)
 [![CS Version](https://img.shields.io/badge/Cobalt%20Strike-3.x--4.x-red?style=flat-square)](#)
