@@ -26,7 +26,7 @@ rule CobaltStrike_Named_Pipes_Default
         author      = "struttonpigeon"
         date        = "2026-11-05"
         reference   = "https://thedfirreport.com/2021/08/29/cobalt-strike-a-defenders-guide/"
-        severity    = "high"
+        severity    = "medium"
         tlp         = "white"
 
     strings:
@@ -43,22 +43,19 @@ rule CobaltStrike_Named_Pipes_Default
             These are used when CS injects a temporary process to run
             a post-ex job (hashdump, screenshot, keylogger, etc.).
             The "postex_" prefix has been default since CS 4.x.
-            "status_" and "postex_ssh_" are used for specific job types.
+            "status_" is used for specific job types.
+            NOTE: "postex_ssh_" was removed — it is a substring of
+            "postex_" and would inflate match counts.
         */
         $pipe_postex     = "\\\\.\\pipe\\postex_"     ascii nocase
         $pipe_status     = "\\\\.\\pipe\\status_"     ascii nocase
-        $pipe_postex_ssh = "\\\\.\\pipe\\postex_ssh_" ascii nocase
-
-        /*
-            Older defaults and common customisations seen in the wild.
-            "msagent_##" where ## is random hex — pattern match.
-        */
-        $pipe_old_1 = "\\\\.\\pipe\\win_svc" ascii nocase
-        $pipe_old_2 = "\\\\.\\pipe\\ntsvcs"   ascii nocase
 
     condition:
         filesize < 50MB and
-        2 of ($pipe_*)
+        (
+            (($pipe_msagent or $pipe_msse) and any of ($pipe_postex, $pipe_status)) or
+            ($pipe_msagent and $pipe_msse)
+        )
 }
 
 
@@ -79,8 +76,7 @@ rule CobaltStrike_Named_Pipes_Strings_Only
         */
         $p1 = "msagent_"   ascii nocase
         $p2 = "postex_"    ascii nocase
-        $p3 = "postex_ssh" ascii nocase
-        $p4 = "MSSE-"      ascii
+        $p3 = "MSSE-"      ascii
 
         /*
             The "pipename" directive in malleable C2 profiles.
@@ -93,7 +89,7 @@ rule CobaltStrike_Named_Pipes_Strings_Only
     condition:
         filesize < 1MB and
         (
-            (2 of ($p*)) or
+            (2 of ($p1, $p2, $p3)) or
             ($directive_smb and any of ($p*)) or
             (all of ($directive_*))
         )

@@ -3,49 +3,36 @@
     Author:      struttonpigeon
     Date:        2026-11-05
     Reference:   https://www.elastic.co/blog/detecting-cobalt-strike-with-memory-signatures
-                 https://www.sentinelone.com/labs/a-]deep-dive-into-cobalt-strike-malleable-c2/
+                 https://www.sentinelone.com/labs/a-deep-dive-into-cobalt-strike-malleable-c2/
 
-    Starting with Cobalt Strike 4.1, the Sleep Mask kit was introduced to
-    obfuscate the beacon in memory while it sleeps.  Before calling Sleep(),
-    the beacon XOR-encrypts (or RC4-encrypts in 4.7+) its own image in
-    memory, then decrypts it on wake.
+    Cobalt Strike's sleep mask feature obfuscates the beacon in memory
+    while it sleeps.  Before calling Sleep(), the beacon encrypts its own
+    image, then decrypts on wake.  Some builds use a simple XOR loop;
+    others use RC4 via SystemFunction032.
 
-    This defeats static memory scanners that look for beacon strings during
-    the sleep interval.  However, the sleep mask code itself has distinctive
-    patterns:
-
-      1. The mask/unmask stub runs before and after Sleep() — its prologue
-         is detectable.
-      2. The XOR key derivation and loop have characteristic byte patterns.
-      3. In CS 4.7+, the sleep mask can use the "sleepmask-vs" (virtual
-         memory protect) variant, which calls VirtualProtect to flip
-         RWX -> RW before sleeping and back on wake.
+    CAVEAT: The byte patterns in these rules (XOR loops, stack frames,
+    VirtualProtect call sequences) are common compiler output and appear
+    in many legitimate binaries.  These rules should be used as supporting
+    evidence alongside other CS-specific detections (config blocks,
+    named pipes, reflective loader), not as standalone alerts.
 */
 
 rule CobaltStrike_SleepMask_XOR_Stub
 {
     meta:
-        description = "Cobalt Strike sleep mask XOR routine — the in-memory obfuscation loop"
+        description = "XOR obfuscation loop with Sleep — generic patterns shared by many tools, use as supporting evidence only"
         author      = "struttonpigeon"
         date        = "2026-11-05"
         reference   = "https://www.elastic.co/blog/detecting-cobalt-strike-with-memory-signatures"
-        severity    = "critical"
+        severity    = "medium"
         tlp         = "white"
 
     strings:
         /*
-            The default sleep mask (CS 4.1 – 4.6) XOR loop for x86.
-            It iterates over the beacon image byte-by-byte, XORing with
-            a 13-byte key (derived from the beacon config).
-
-            Typical x86 assembly:
-            8B 44 24 04        MOV EAX, [ESP+4]        ; pointer to data
-            8B 4C 24 08        MOV ECX, [ESP+8]        ; data length
-            8B 54 24 0C        MOV EDX, [ESP+0Ch]      ; pointer to key
-            ...
-            30 10              XOR BYTE PTR [EAX], DL   ; XOR one byte
-            40                 INC EAX
-            49                 DEC ECX
+            XOR loop body — byte-by-byte XOR with a key.
+            30 1?              XOR BYTE PTR [reg], reg   ; XOR one byte
+            4?                 INC/DEC
+            4?                 INC/DEC
             75 ??              JNZ loop
         */
         $xor_loop_x86 = { 30 1? [0-4] 4? 4? 75 }
@@ -61,7 +48,9 @@ rule CobaltStrike_SleepMask_XOR_Stub
 
         /*
             Function prologue patterns seen in default sleep mask stubs.
-            The mask function has a predictable stack frame:
+            NOTE: These are standard MSVC prologues that appear in many
+            legitimate binaries; they add value only in combination with
+            the XOR loop and Sleep string above.
         */
         $stack_frame_x86 = { 55 89 E5 83 EC ?? 53 56 57 }   // PUSH EBP; MOV EBP,ESP; SUB ESP,??; PUSH EBX,ESI,EDI
         $stack_frame_x64 = { 48 89 5C 24 ?? 48 89 6C 24 }   // MOV [RSP+?],RBX; MOV [RSP+?],RBP
@@ -85,54 +74,45 @@ rule CobaltStrike_SleepMask_XOR_Stub
 rule CobaltStrike_SleepMask_VirtualProtect
 {
     meta:
-        description = "CS 4.7+ sleep mask with VirtualProtect — flips memory protections during sleep"
+        description = "Sleep mask with VirtualProtect memory protection flipping — generic patterns, use as supporting evidence"
         author      = "struttonpigeon"
         date        = "2026-11-05"
         reference   = "https://www.sentinelone.com/labs/a-deep-dive-into-cobalt-strike-malleable-c2/"
-        severity    = "critical"
+        severity    = "medium"
         tlp         = "white"
 
     strings:
         /*
-            The "sleepmask-vs" variant calls VirtualProtect twice:
+            Some sleep mask variants call VirtualProtect twice:
               1. Before sleep: change beacon memory from RWX to RW (0x04)
               2. After sleep:  change back from RW to RWX (0x40)
-
-            The constants PAGE_READWRITE (0x04) and
-            PAGE_EXECUTE_READWRITE (0x40) appear near VirtualProtect calls.
         */
         $vp_str   = "VirtualProtect" ascii
         $sleep_fn = "Sleep" ascii fullword
 
         /*
-            Push 0x04 (PAGE_READWRITE) before VirtualProtect:
-            6A 04           PUSH 4
-            or
-            41 B? 04 00 00 00  MOV R?D, 4   (x64)
+            x86: PUSH imm8 near an indirect CALL [IAT]:
+              6A 04  PUSH 4 (PAGE_READWRITE)
+              6A 40  PUSH 0x40 (PAGE_EXECUTE_READWRITE)
         */
-        $page_rw_x86  = { 6A 04 }
-        $page_rw_x64  = { 41 B? 04 00 00 00 }
+        $page_rw_x86  = { 6A 04 [0-8] FF 15 }
+        $page_rwx_x86 = { 6A 40 [0-8] FF 15 }
 
         /*
-            Push 0x40 (PAGE_EXECUTE_READWRITE) after waking:
-            6A 40           PUSH 40h
+            x64: MOV R8D-R15D, imm32.  41 B8..BF are the 32-bit register
+            MOV opcodes; 41 B0..B7 are 8-bit MOVs (excluded).
+              41 B? 04 00 00 00  MOV R?D, 4   (PAGE_READWRITE)
+              41 B? 40 00 00 00  MOV R?D, 40h (PAGE_EXECUTE_READWRITE)
         */
-        $page_rwx = { 6A 40 }
-
-        /*
-            CS 4.7+ sleep mask uses SystemFunction032 (RC4) from advapi32
-            as an alternative to the XOR loop:
-        */
-        $rc4_fn   = "SystemFunction032" ascii
-        $advapi   = "advapi32" ascii nocase
+        $page_rw_x64  = { 41 (B8|B9|BA|BB|BC|BD|BE|BF) 04 00 00 00 }
+        $page_rwx_x64 = { 41 (B8|B9|BA|BB|BC|BD|BE|BF) 40 00 00 00 }
 
     condition:
         filesize < 10MB and
         $vp_str and $sleep_fn and
         (
-            ($page_rw_x86 and $page_rwx) or
-            ($page_rw_x64 and $page_rwx) or
-            ($rc4_fn and $advapi)
+            ($page_rw_x86 and $page_rwx_x86) or
+            ($page_rw_x64 and $page_rwx_x64)
         )
 }
 
@@ -140,38 +120,28 @@ rule CobaltStrike_SleepMask_VirtualProtect
 rule CobaltStrike_SleepMask_RC4_SystemFunction032
 {
     meta:
-        description = "CS 4.7+ sleep mask using ntdll/advapi32 SystemFunction032 for RC4 obfuscation"
+        description = "SystemFunction032 (RC4) + Sleep import in a non-system binary — generic crypto pattern, use as supporting evidence"
         author      = "struttonpigeon"
         date        = "2026-11-05"
         reference   = "https://www.elastic.co/blog/detecting-cobalt-strike-with-memory-signatures"
-        severity    = "critical"
+        severity    = "medium"
         tlp         = "white"
 
     strings:
         /*
             SystemFunction032 is an undocumented Windows API that performs
-            RC4 encryption.  CS 4.7+ uses it instead of a custom XOR loop
-            because it leaves a smaller and less distinctive code footprint.
-
-            The function is imported by ordinal or name from advapi32.dll:
+            RC4 encryption.  Some C2 frameworks use it in place of a custom
+            XOR loop for a smaller code footprint.
+            NOTE: advapi32.dll and cryptsp.dll export this function and
+            will match the string alone.  The Sleep requirement excludes
+            most system DLLs.  For PE files, add a pe.exports() exclusion.
         */
         $sf032_name = "SystemFunction032" ascii
         $sf036_name = "SystemFunction036" ascii   // RtlGenRandom — used for key generation
-
-        /*
-            USTRING structure setup — SystemFunction032 takes two USTRING
-            params (length, maxlength, buffer).  The struct setup pattern:
-        */
-        $ustring_setup = { 89 ?? 24 ?? 89 ?? 24 ?? 89 ?? 24 ?? }
-
-        /*
-            The beacon's image base and size are passed to the RC4 function.
-            Typical pattern: loading the DOS header address:
-        */
-        $dos_header = { 48 8D ?? ?? ?? ?? ?? 48 89 }    // LEA reg, [rip+??]; MOV
+        $sleep_fn   = "Sleep" ascii fullword
 
     condition:
         filesize < 10MB and
-        $sf032_name and
-        ($sf036_name or $ustring_setup or $dos_header)
+        $sf032_name and $sleep_fn and
+        $sf036_name
 }

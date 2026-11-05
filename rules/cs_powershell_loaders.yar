@@ -1,15 +1,17 @@
 /*
-    Cobalt Strike — PowerShell & .NET Loader Detection
+    Generic PowerShell & .NET Loader Detection
     Author:      struttonpigeon
     Date:        2026-11-05
     Reference:   https://thedfirreport.com/2021/08/29/cobalt-strike-a-defenders-guide/
                  https://unit42.paloaltonetworks.com/cobalt-strike-malleable-c2/
 
-    Cobalt Strike ships several payload generators that produce PowerShell
-    and .NET delivery scripts.  These rules target the scripted loaders
-    (PowerShell cradles, HTA wrappers, .NET Assembly.Load patterns) rather
-    than the shellcode they carry — shellcode rules are in
-    cs_shellcode_stagers.yar.
+    These rules target scripted loaders (PowerShell cradles, HTA wrappers,
+    .NET Assembly.Load patterns) rather than the shellcode they carry —
+    shellcode rules are in cs_shellcode_stagers.yar.
+
+    NOTE: These patterns are NOT Cobalt Strike specific.  They match
+    generic loader techniques shared by CS, Empire, PowerSploit, Covenant,
+    and other offensive toolkits.  Rules are named Generic_* accordingly.
 
     Detection layers:
       1. PowerShell cradle templates (IEX download, encoded command)
@@ -17,19 +19,19 @@
       3. HTA / VBS / VBA macro wrappers
 */
 
-rule CobaltStrike_PowerShell_Cradle
+rule Generic_PowerShell_Obfuscated_Loader
 {
     meta:
-        description = "Cobalt Strike default PowerShell download cradle patterns"
+        description = "Obfuscated PowerShell download cradle — matches CS, Empire, PowerSploit, Covenant, and similar"
         author      = "struttonpigeon"
         date        = "2026-11-05"
         reference   = "https://thedfirreport.com/2021/08/29/cobalt-strike-a-defenders-guide/"
-        severity    = "critical"
+        severity    = "medium"
         tlp         = "white"
 
     strings:
         /*
-            CS generates PowerShell one-liners that follow this template:
+            Generic PowerShell one-liner template used by many tools:
 
               powershell -nop -w hidden -encodedcommand <base64>
 
@@ -51,17 +53,13 @@ rule CobaltStrike_PowerShell_Cradle
             The download cradle pattern — IEX + WebClient or
             Invoke-Expression + DownloadString.
         */
-        $iex_wc    = "IEX" ascii nocase
+        $iex_wc    = "IEX" ascii nocase fullword
         $dl_string = "downloadstring" ascii nocase
         $webclient = "net.webclient" ascii nocase
         $new_obj   = "new-object" ascii nocase
 
-        /*
-            CS-specific: the PowerShell payload often includes a
-            Base64-decoded shellcode injector using these .NET types:
-        */
+        /* Invoke-Expression is common across many offensive toolkits: */
         $invoke_expr   = "Invoke-Expression" ascii nocase
-        $start_process = "Start-Process" ascii nocase
 
     condition:
         filesize < 2MB and
@@ -77,25 +75,22 @@ rule CobaltStrike_PowerShell_Cradle
 }
 
 
-rule CobaltStrike_DotNet_Assembly_Loader
+rule Generic_DotNet_Assembly_Loader
 {
     meta:
-        description = "In-memory .NET assembly loading — Cobalt Strike execute-assembly technique"
+        description = "In-memory .NET assembly loading patterns in scripts — matches SharpSploit, offensive PowerShell, and similar loaders"
         author      = "struttonpigeon"
         date        = "2026-11-05"
         reference   = "https://www.mandiant.com/resources/defining-cobalt-strike-components"
-        severity    = "high"
+        severity    = "medium"
         tlp         = "white"
 
     strings:
         /*
-            Cobalt Strike's execute-assembly command loads a .NET assembly
-            reflectively.  The PowerShell / C# loader uses these APIs:
-
-            [System.Reflection.Assembly]::Load(byte[])
-            [System.Runtime.InteropServices.Marshal]::Copy(...)
-
-            These appear in the loader script or compiled stub.
+            Reflective .NET assembly loading API references.
+            These appear in loader scripts (PowerShell, C#) that call:
+              [System.Reflection.Assembly]::Load(byte[])
+              [System.Runtime.InteropServices.Marshal]::Copy(...)
         */
         $asm_load     = "System.Reflection.Assembly" ascii nocase
         $asm_load2    = "Assembly.Load" ascii nocase
@@ -107,7 +102,6 @@ rule CobaltStrike_DotNet_Assembly_Loader
             VirtualAlloc + copy shellcode pattern in C# / PowerShell:
         */
         $valloc       = "VirtualAlloc" ascii
-        $memcpy       = "Copy-Memory" ascii nocase
         $create_thrd  = "CreateThread" ascii
 
         /*
@@ -130,14 +124,14 @@ rule CobaltStrike_DotNet_Assembly_Loader
 }
 
 
-rule CobaltStrike_HTA_VBS_Loader
+rule Generic_HTA_VBS_Loader
 {
     meta:
-        description = "Cobalt Strike HTA / VBScript stager wrapper patterns"
+        description = "HTA / VBScript stager wrapper — matches CS, generic malware droppers, and similar"
         author      = "struttonpigeon"
         date        = "2026-11-05"
         reference   = "https://unit42.paloaltonetworks.com/cobalt-strike-malleable-c2/"
-        severity    = "high"
+        severity    = "medium"
         tlp         = "white"
 
     strings:
@@ -165,9 +159,12 @@ rule CobaltStrike_HTA_VBS_Loader
         $chr_concat   = /Chr\(\d+\)\s*&\s*Chr\(\d+\)/ ascii nocase
 
         /*
-            Embedded Base64 payload — CS HTA files contain a large
-            Base64 blob that decodes to the stager shellcode.
-            Match a B64 blob of at least 500 characters (typical CS payload).
+            Embedded Base64 payload — HTA files often contain a large
+            Base64 blob that decodes to shellcode.
+            NOTE: This regex has no literal atom so YARA cannot use
+            Aho-Corasick acceleration; it relies on other literal strings
+            in the condition to avoid a full-file scan.  May also match
+            minified JavaScript, so always require additional context.
         */
         $b64_blob     = /[A-Za-z0-9+\/]{500,}={0,2}/ ascii
 

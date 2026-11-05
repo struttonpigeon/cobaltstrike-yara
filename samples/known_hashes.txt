@@ -1,9 +1,8 @@
 # Cobalt Strike — Known Sample Hashes for Rule Validation
 # ========================================================
 #
-# These SHA-256 hashes are drawn from publicly documented threat intel
-# reports and malware repositories.  They are provided for rule testing
-# and validation purposes only.
+# This file is a placeholder for community-contributed sample hashes.
+# No verified hashes are currently available.
 #
 # IMPORTANT: Download samples only from authorised malware repositories
 # (MalwareBazaar, VirusTotal, Hybrid Analysis) and handle them in an
@@ -12,99 +11,35 @@
 #
 # Format:  SHA256  |  Type  |  Source / Reference
 # --------------------------------------------------------
-
-# =====================
-# Shellcode Stagers
-# =====================
-
-# x86 HTTP stager — DFIR Report "Cobalt Strike, a Defender's Guide" (2021-08-29)
-6ebc396a5b65ee0a25d84b5662a2b7736c4a0c6fcb0a3a5c2065532fdd66a848 | x86_stager | DFIR Report 2021
-
-# x64 HTTPS stager — Elastic Security Labs analysis
-a3e6324d7e82ff379f3808e91a178b5a3dbb8eb60c3e9c2fc4a3ef49d42ca25a | x64_stager | Elastic Security Labs
-
-# =====================
-# Beacon DLLs
-# =====================
-
-# beacon.dll (x86) — MalwareBazaar CobaltStrike tag
-fd4085e1683f0b151b67b5af2d2e3e9e4df575d732cd1e1874e512bd58c250f4 | beacon_x86 | MalwareBazaar
-
-# beacon.x64.dll — MalwareBazaar CobaltStrike tag
-54e2e0e33fed2d0a87c363e82e42b50ff91fbec5308ca2ede816bf45d791ae59 | beacon_x64 | MalwareBazaar
-
-# Reflective DLL with default ReflectiveLoader export — Unit 42 analysis
-3c4eb2a7e8e92d1acee9c3e2ff3d70d84e19675c6a254626ad41b0b27fceb53f | reflective_dll | Unit42
-
-# =====================
-# PowerShell Loaders
-# =====================
-
-# PowerShell download cradle — SentinelOne Cobalt Strike analysis
-7a35b1bd83e8e95de5d5b69641e3ade97a94b0a7cad01817e7f9b3c0268d9148 | ps1_cradle | SentinelOne
-
-# Encoded PowerShell stager — Recorded Future CS tracking
-b8a7b6e3e7e1f4e08f7c3ca9d0a3e1c70b2ae5d4f1e3d2c1b0a9f8e7d6c5b4a3 | ps1_encoded | Recorded Future
-
-# =====================
-# HTA / VBS Wrappers
-# =====================
-
-# HTA stager with VBScript — Proofpoint threat research
-d4e8f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0 | hta_stager | Proofpoint
-
-# =====================
-# Beacon Configs (decoded / extracted)
-# =====================
-
-# Beacon with watermark 0x12345678 — Team Cymru CS tracking project
-98d2b5c4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e7d6 | config_wm_12345678 | Team Cymru
-
-# Beacon with watermark 0x5109BF6D — Recorded Future
-a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2 | config_wm_5109bf6d | Recorded Future
-
-# Beacon with DNS-TXT beacon type — DFIR Report "BazarLoader to Conti" (2021-09-13)
-c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2 | config_dns | DFIR Report 2021
-
-# =====================
-# Sleep Mask Samples
-# =====================
-
-# CS 4.7+ beacon with sleep mask RC4 (SystemFunction032) — Elastic
-e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2 | sleepmask_rc4 | Elastic Security Labs
-
-# =====================
-# Malleable C2 Profiles
-# =====================
-
-# jquery-c2.4.2.profile — publicly available CS profile (GitHub)
-f1e2d3c4b5a6f7e8d9c0b1a2f3e4d5c6b7a8f9e0d1c2b3a4f5e6d7c8b9a0f1e2 | malleable_profile | GitHub (public)
-
+#
+# To contribute a hash:
+#   1. Confirm the sample exists in MalwareBazaar or VirusTotal
+#   2. Cite the public report or repository where it was documented
+#   3. Note which rules it should trigger
+#   4. Open a PR
+#
 # =====================
 # Validation Notes
 # =====================
 #
-# To validate rules against these samples:
+# To validate rules against a sample:
 #
-#   1. Download samples from MalwareBazaar:
+#   1. Download from MalwareBazaar:
 #      curl -X POST https://mb-api.abuse.ch/api/v1/ \
 #        -d "query=get_file&sha256_hash=<HASH>"
 #
-#   2. Run YARA rules:
-#      yara -r rules/ <sample_file>
+#   2. Run YARA rules against the sample:
+#      for rulefile in rules/*.yar; do yara "$rulefile" sample.bin; done
 #
 #   3. Expected matches per sample type:
-#      - x86_stager       -> CobaltStrike_Shellcode_Stager_x86,
-#                            CobaltStrike_Shellcode_Stager_Generic
+#      - x86_stager       -> CobaltStrike_Shellcode_Stager_x86
 #      - x64_stager       -> CobaltStrike_Shellcode_Stager_x64
 #      - beacon_x86/x64   -> CobaltStrike_Beacon_DLL_Characteristics,
 #                            CobaltStrike_ReflectiveLoader_Export
 #      - reflective_dll   -> CobaltStrike_ReflectiveLoader_Code,
 #                            CobaltStrike_ReflectiveLoader_Export
-#      - ps1_cradle       -> CobaltStrike_PowerShell_Cradle
-#      - ps1_encoded      -> CobaltStrike_PowerShell_Cradle
-#      - hta_stager       -> CobaltStrike_HTA_VBS_Loader
-#      - config_wm_*      -> CobaltStrike_Watermark_Cracked_Common,
-#                            CobaltStrike_Beacon_Config_Decoded
-#      - sleepmask_rc4    -> CobaltStrike_SleepMask_RC4_SystemFunction032
+#      - ps1_cradle       -> Generic_PowerShell_Obfuscated_Loader
+#      - hta_stager       -> Generic_HTA_VBS_Loader
+#      - config_decoded   -> CobaltStrike_Beacon_Config_Decoded,
+#                            CobaltStrike_Watermark_Cracked_Common
 #      - malleable_profile -> CobaltStrike_Named_Pipes_Strings_Only

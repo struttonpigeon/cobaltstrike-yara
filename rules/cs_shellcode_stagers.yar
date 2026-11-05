@@ -16,11 +16,12 @@
 rule CobaltStrike_Shellcode_Stager_x86
 {
     meta:
-        description = "Cobalt Strike x86 shellcode stager — classic CLD+CALL prologue"
+        description = "x86 shellcode stager with CLD+CALL prologue — shared with Metasploit and other block_api users"
         author      = "struttonpigeon"
         date        = "2026-11-05"
         reference   = "https://thedfirreport.com/2021/08/29/cobalt-strike-a-defenders-guide/"
-        severity    = "critical"
+        shared_with = "Metasploit (Stephen Fewer's block_api)"
+        severity    = "high"
         tlp         = "white"
 
     strings:
@@ -39,15 +40,21 @@ rule CobaltStrike_Shellcode_Stager_x86
         $prologue_x86 = { FC E8 ?? 00 00 00 }
 
         /*
-            After the prologue the stager resolves kernel32 via the PEB:
-            60              PUSHAD
-            89 E5           MOV EBP, ESP
-            31 C0           XOR EAX, EAX
-            64 8B 50 30     MOV EDX, DWORD PTR FS:[EAX+30h]  ; PEB
-            8B 52 0C        MOV EDX, [EDX+0Ch]                ; Ldr
-            8B 52 14        MOV EDX, [EDX+14h]                ; InMemoryOrderModuleList
+            After the prologue the stager resolves kernel32 via the PEB.
+            Two variants exist in the wild:
+
+            Metasploit (block_api):
+            60 89 E5 31 C0 64 8B 50 30   PUSHAD; MOV EBP,ESP; XOR EAX,EAX; MOV EDX,FS:[EAX+30h]
+
+            Cobalt Strike variant:
+            60 89 E5 31 D2 64 8B 52 30   PUSHAD; MOV EBP,ESP; XOR EDX,EDX; MOV EDX,FS:[EDX+30h]
+
+            Both continue with:
+            8B 52 0C  MOV EDX,[EDX+0Ch]   ; Ldr
+            8B 52 14  MOV EDX,[EDX+14h]   ; InMemoryOrderModuleList
         */
-        $peb_walk_x86 = { 60 89 E5 31 C0 64 8B 50 30 8B 52 0C 8B 52 14 }
+        $peb_walk_x86_msf = { 60 89 E5 31 C0 64 8B 50 30 8B 52 0C 8B 52 14 }
+        $peb_walk_x86_cs  = { 60 89 E5 31 D2 64 8B 52 30 8B 52 0C 8B 52 14 }
 
         /*
             API hashing — Cobalt Strike uses a ROR-13 hash to resolve API
@@ -58,18 +65,19 @@ rule CobaltStrike_Shellcode_Stager_x86
         $ror13_hash = { C1 CF 0D }
 
     condition:
-        $prologue_x86 at 0 and $peb_walk_x86 and $ror13_hash
+        $prologue_x86 at 0 and any of ($peb_walk_x86_*) and $ror13_hash
 }
 
 
 rule CobaltStrike_Shellcode_Stager_x64
 {
     meta:
-        description = "Cobalt Strike x64 shellcode stager — CLD + stack alignment prologue"
+        description = "x64 shellcode stager with CLD + stack alignment prologue — shared with Metasploit and other block_api users"
         author      = "struttonpigeon"
         date        = "2026-11-05"
         reference   = "https://thedfirreport.com/2021/08/29/cobalt-strike-a-defenders-guide/"
-        severity    = "critical"
+        shared_with = "Metasploit (Stephen Fewer's block_api)"
+        severity    = "high"
         tlp         = "white"
 
     strings:
@@ -79,7 +87,8 @@ rule CobaltStrike_Shellcode_Stager_x64
             E8 ?? ?? ?? ??      CALL <offset>                 ; call-over-data
 
             The 16-byte stack alignment (AND RSP, -10h) is required by the
-            x64 calling convention and is the hallmark of CS x64 stagers.
+            x64 calling convention and appears in both CS and Metasploit
+            x64 stagers (standard block_api prologue, not CS-specific).
         */
         $prologue_x64 = { FC 48 83 E4 F0 E8 }
 
@@ -91,26 +100,76 @@ rule CobaltStrike_Shellcode_Stager_x64
         */
         $peb_walk_x64 = { 65 48 8B 52 60 48 8B 52 18 48 8B 52 20 }
 
-        /*  ROR-13 in 64-bit form:  41 C1 CF 0D   ROR R15D, 0Dh  */
-        $ror13_hash_x64 = { 41 C1 CF 0D }
+        /*  ROR-13 in 64-bit form:  41 C1 C9 0D   ROR R9D, 0Dh  */
+        $ror13_hash_x64 = { 41 C1 C9 0D }
 
     condition:
         $prologue_x64 at 0 and $peb_walk_x64 and $ror13_hash_x64
 }
 
 
-rule CobaltStrike_Shellcode_Stager_Generic
+rule CobaltStrike_Shellcode_Stager_x86_Embedded
 {
     meta:
-        description = "Generic Cobalt Strike stager — HTTP/HTTPS staging with WinInet"
+        description = "CS x86 stager shellcode embedded in a dropper, loader, or memory dump (no offset constraint)"
         author      = "struttonpigeon"
         date        = "2026-11-05"
-        reference   = "https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2_http-staging.htm"
+        reference   = "https://thedfirreport.com/2021/08/29/cobalt-strike-a-defenders-guide/"
+        shared_with = "Metasploit (Stephen Fewer's block_api)"
         severity    = "high"
         tlp         = "white"
 
     strings:
-        /* Default User-Agent embedded in stager shellcode */
+        $prologue_x86       = { FC E8 ?? 00 00 00 }
+        $peb_walk_x86_msf   = { 60 89 E5 31 C0 64 8B 50 30 8B 52 0C 8B 52 14 }
+        $peb_walk_x86_cs    = { 60 89 E5 31 D2 64 8B 52 30 8B 52 0C 8B 52 14 }
+        $ror13_hash         = { C1 CF 0D }
+
+    condition:
+        filesize < 10MB and
+        not ($prologue_x86 at 0) and
+        $prologue_x86 and any of ($peb_walk_x86_*) and $ror13_hash
+}
+
+
+rule CobaltStrike_Shellcode_Stager_x64_Embedded
+{
+    meta:
+        description = "CS x64 stager shellcode embedded in a dropper, loader, or memory dump (no offset constraint)"
+        author      = "struttonpigeon"
+        date        = "2026-11-05"
+        reference   = "https://thedfirreport.com/2021/08/29/cobalt-strike-a-defenders-guide/"
+        shared_with = "Metasploit (Stephen Fewer's block_api)"
+        severity    = "high"
+        tlp         = "white"
+
+    strings:
+        $prologue_x64       = { FC 48 83 E4 F0 E8 }
+        $peb_walk_x64       = { 65 48 8B 52 60 48 8B 52 18 48 8B 52 20 }
+        $ror13_hash_x64     = { 41 C1 C9 0D }
+
+    condition:
+        filesize < 10MB and
+        not ($prologue_x64 at 0) and
+        $prologue_x64 and $peb_walk_x64 and $ror13_hash_x64
+}
+
+
+rule CobaltStrike_Shellcode_Stager_Generic
+{
+    meta:
+        description = "CS stager with plaintext WinInet imports — only matches stagers that resolve APIs by name, not by hash"
+        author      = "struttonpigeon"
+        date        = "2026-11-05"
+        reference   = "https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2_http-staging.htm"
+        severity    = "medium"
+        tlp         = "white"
+
+    strings:
+        /* Default User-Agent embedded in stager shellcode.
+           NOTE: Hash-resolving stagers (the default) will NOT contain
+           these plaintext strings.  This rule catches only stagers that
+           import by name, which is less common. */
         $ua_default = "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0)" ascii
 
         /* WinInet API string references used by the HTTP stager */

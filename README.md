@@ -2,10 +2,10 @@
 
 # Cobalt Strike YARA Rule Pack
 
-**22 detection rules for Cobalt Strike loaders, beacons, and post-exploitation artifacts**
+**24 detection rules + 1 private helper for Cobalt Strike loaders, beacons, and post-exploitation artifacts**
 
 [![YARA](https://img.shields.io/badge/YARA-4.x-blue?style=flat-square)](https://virustotal.github.io/yara/)
-[![Rules](https://img.shields.io/badge/rules-22-green?style=flat-square)](#rule-inventory)
+[![Rules](https://img.shields.io/badge/rules-24+1-green?style=flat-square)](#rule-inventory)
 [![CS Version](https://img.shields.io/badge/Cobalt%20Strike-3.x--4.x-red?style=flat-square)](#)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)](#license)
 
@@ -17,15 +17,11 @@
 
 ## What This Is
 
-IM DOING THIS BECAUSE MY INTERNAL RED TEAM IS GRIEFING ME
+Born out of frustration with an internal red team that insists on running default Cobalt Strike without even basic obfuscation. If your red team does the same, these rules are for you.
 
-WHY CANT YALL JUST USE THE ARTIFACT KIT LIKE NORMAL PEOPLE???
+This is a curated set of YARA rules that detect **Cobalt Strike** artifacts across every stage of the attack chain — from initial shellcode stagers through in-memory beacon configurations. Each rule is heavily commented, explaining exactly which bytes are matched and why, making this useful both as a detection toolset and a learning resource.
 
-Alright, so i got that out of my system now. This is a curated set of YARA rules that detect **Cobalt Strike** artifacts across every stage of the attack chain. Should cover initial shellcode stagers through in-memory beacon configurations. Each rule is heavily commented, explaining exactly which bytes are matched and why, making this useful both as a detection toolset and a learning resource.
-
-These rules target default and lightly customised CS deployments (versions 3.x through 4.x), which still account for the majority of Cobalt Strike usage observed in the wild.
-
-For those of you whose red team uses CS without obfuscation... COUGH COUGH this is for you.
+These rules target default and lightly customised CS deployments (versions 3.x through 4.x). Operators using Artifact Kit, UDRL, or Sleep Mask Kit modifications will evade many of these signatures — see [Limitations](#limitations--evasion) below.
 
 ## Quick Start
 
@@ -37,26 +33,30 @@ cd cobaltstrike-yara
 # Scan a suspect file
 yara rules/cs_beacon_config.yar suspect.bin
 
-# Scan recursively with all rules
-yara -r rules/ /path/to/samples/
+# Scan a directory of samples with all rules
+for rulefile in rules/*.yar; do yara "$rulefile" /path/to/samples/; done
+
+# Or compile first, then scan a directory recursively
+yarac -C rules/*.yar compiled.yarc
+yara -r compiled.yarc /path/to/samples/
 
 # Scan a memory dump
-yara -r rules/ process_dump.dmp
+yara rules/cs_sleep_mask.yar process_dump.dmp
 ```
 
 ## Rule Inventory
 
 | File | Rules | Detection Surface |
 |:-----|:-----:|:------------------|
-| [`cs_shellcode_stagers.yar`](rules/cs_shellcode_stagers.yar) | 3 | x86/x64 stager prologues (`CLD`+`CALL`), PEB walk, ROR-13 API hashing, WinInet HTTP staging |
-| [`cs_reflective_loader.yar`](rules/cs_reflective_loader.yar) | 3 | `ReflectiveLoader` export, PE-header parsing stub, beacon DLL characteristics |
-| [`cs_beacon_config.yar`](rules/cs_beacon_config.yar) | 4 | XOR-encoded config blocks (keys `0x69`, `0x2E`), decoded setting IDs, default C2 URI strings |
+| [`cs_shellcode_stagers.yar`](rules/cs_shellcode_stagers.yar) | 5 | x86/x64 stager prologues (`CLD`+`CALL`), PEB walk (MSF + CS variants), ROR-13 API hashing, `Stager_Generic` matches only plaintext-import stagers (not hash-resolving default), embedded shellcode variants |
+| [`cs_reflective_loader.yar`](rules/cs_reflective_loader.yar) | 3+1 | `ReflectiveLoader` export (string + `pe.exports()`), PE-header parsing stub, beacon DLL characteristics, `IsPE` private helper |
+| [`cs_beacon_config.yar`](rules/cs_beacon_config.yar) | 4 | XOR-encoded config blocks (keys `0x69`, `0x2E`) with correct TLV layout, decoded setting IDs, default C2 URI strings |
 | [`cs_named_pipes.yar`](rules/cs_named_pipes.yar) | 2 | Default SMB beacon and post-ex pipe names (`msagent_`, `MSSE-`, `postex_`), malleable C2 profile directives |
-| [`cs_powershell_loaders.yar`](rules/cs_powershell_loaders.yar) | 3 | PowerShell download cradles, .NET `Assembly.Load` reflective execution, HTA/VBS delivery wrappers |
-| [`cs_sleep_mask.yar`](rules/cs_sleep_mask.yar) | 3 | Sleep mask XOR loop, `VirtualProtect` memory protection flipping, RC4 via `SystemFunction032` |
+| [`cs_powershell_loaders.yar`](rules/cs_powershell_loaders.yar) | 3 | Generic PowerShell/`.NET`/HTA loaders (match CS + Empire, PowerSploit, Covenant, etc.) |
+| [`cs_sleep_mask.yar`](rules/cs_sleep_mask.yar) | 3 | Sleep mask XOR loop, `VirtualProtect` memory protection flipping, RC4 via `SystemFunction032` — generic patterns, use as supporting evidence |
 | [`cs_watermarks.yar`](rules/cs_watermarks.yar) | 4 | Known cracked/leaked license watermarks (decoded + XOR-encoded), generic watermark field detection |
 
-> Every rule includes a `severity` meta field: **critical** (near-certain CS), **high** (strong indicator), or **medium** (supporting evidence).
+> Every rule includes a `severity` meta field: **critical** (high confidence, CS-specific patterns), **high** (strong indicator, may be shared with other tools — see `shared_with` metadata), or **medium** (supporting evidence, use alongside other detections). Rules shared with Metasploit or generic toolkits are documented via the `shared_with` meta field.
 
 ## Attack Chain Coverage
 
@@ -71,39 +71,33 @@ yara -r rules/ process_dump.dmp
 
 ## Methodology
 
-### Sample Sources
+### References Consulted
 
-| Source | What It Provided |
-|:-------|:-----------------|
+| Source | Relevance |
+|:-------|:----------|
 | [MalwareBazaar](https://bazaar.abuse.ch/) | Tagged Cobalt Strike beacon and stager samples |
 | [VirusTotal](https://www.virustotal.com/) | Community-tagged samples, behavioral reports |
 | [Hybrid Analysis](https://www.hybrid-analysis.com/) | Sandbox execution reports with CS indicators |
 | [The DFIR Report](https://thedfirreport.com/) | Full intrusion case studies with IOC sets |
 | [Elastic Security Labs](https://www.elastic.co/security-labs) | Memory signature research |
 | [SentinelOne Labs](https://www.sentinelone.com/labs/) | CS internals deep dives |
+| [CobaltStrikeParser](https://github.com/Sentinel-One/CobaltStrikeParser) | Config field definitions and TLV layout |
+| [1768.py](https://blog.didierstevens.com/2021/11/03/cobalt-strike-decoding/) | Beacon config decoding methodology |
 
-### Analysis Toolchain
-
-| Tool | Role |
-|:-----|:-----|
-| PE-bear / CFF Explorer | PE header inspection |
-| x64dbg / IDA Pro | Shellcode and loader disassembly |
-| CyberChef | XOR brute-force decoding |
-| [CobaltStrikeParser](https://github.com/Sentinel-One/CobaltStrikeParser) | Automated config extraction |
-| [1768.py](https://blog.didierstevens.com/2021/11/03/cobalt-strike-decoding/) | Beacon config decoding |
-| strings / FLOSS | Obfuscated string extraction |
+> **Note:** Reference URLs were current as of 2026-11-05 and have not been re-checked since. Some may have moved or become unavailable.
 
 ### Pattern Extraction Process
 
-1. **Disassemble** — identify byte sequences unique to Cobalt Strike, not shared with Metasploit, Sliver, or legitimate software.
-2. **Cross-reference** — confirm stability across multiple versions and campaign samples.
-3. **Compute XOR variants** — pre-compute encoded byte patterns for the two most common config XOR keys (`0x69` and `0x2E`).
-4. **Validate** — test against non-CS samples (Metasploit, Sliver, Brute Ratel, clean PE files) to verify low false-positive rate.
-5. **Layer conditions** — require multiple string matches per rule to prevent noise from partial byte collisions.
+1. **Disassemble** — identify byte sequences characteristic of Cobalt Strike. Some patterns (PEB walk, ROR-13 hashing) are shared with Metasploit's block\_api shellcode; `shared_with` metadata notes this where applicable.
+2. **Cross-reference** — confirm stability across CS 3.x and 4.x builds using public reports and decoded configs.
+3. **Compute XOR variants** — pre-compute encoded byte patterns for the two most common config XOR keys (`0x69` and `0x2E`), including the full TLV layout (setting ID + type + length + value).
+4. **Layer conditions** — require multiple string matches per rule to prevent noise from partial byte collisions.
+
+> **Note:** Formal false-positive testing against a corpus of non-CS samples (Metasploit, Sliver, Brute Ratel, clean PEs) has not been performed. Community contributions of FP test results are welcome.
 
 ## Test Samples
 
-[`samples/known_hashes.txt`](samples/known_hashes.txt) contains SHA-256 hashes of publicly documented samples with the expected rule matches for each. To validate:
+[`samples/known_hashes.txt`](samples/known_hashes.txt) is a template for community-contributed sample hashes. No hashes are included by default — see the file for the expected format and contribution instructions. To validate a sample you have obtained from a public repository:
 
 ```bash
 # Download a sample from MalwareBazaar
@@ -113,8 +107,8 @@ curl -X POST https://mb-api.abuse.ch/api/v1/ \
 # Unzip (password: infected) in an isolated environment
 unzip -P infected sample.zip
 
-# Test
-yara -r rules/ sample.bin
+# Test against all rule files
+for rulefile in rules/*.yar; do yara "$rulefile" sample.bin; done
 ```
 
 > **Handle all samples in an isolated analysis VM. Never execute on production systems.**
@@ -152,8 +146,9 @@ cobaltstrike-yara/
 │   ├── cs_powershell_loaders.yar   # PowerShell / .NET / HTA loaders
 │   ├── cs_sleep_mask.yar           # Sleep mask obfuscation
 │   └── cs_watermarks.yar           # Cracked license watermarks
-└── samples/
-    └── known_hashes.txt            # Public sample hashes for validation
+├── samples/
+│   └── known_hashes.txt            # Public sample hashes for validation
+└── test_blobs/                     # Synthetic test blobs for pattern matching validation
 ```
 
 ## Contributing
