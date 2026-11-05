@@ -3,6 +3,7 @@
 # Cobalt Strike YARA Rule Pack
 
 **22 detection rules for Cobalt Strike loaders, beacons, and post-exploitation artifacts**
+IM DOING THIS BECAUSE MY INTERNAL RED TEAM IS GRIEFING ME
 
 [![YARA](https://img.shields.io/badge/YARA-4.x-blue?style=flat-square)](https://virustotal.github.io/yara/)
 [![Rules](https://img.shields.io/badge/rules-22-green?style=flat-square)](#rule-inventory)
@@ -138,7 +139,7 @@ These rules catch **default and lightly modified** deployments. Mature operators
 ## Project Structure
 
 ```
-cobalt-strike-yara/
+cobaltstrike-yara/
 ├── README.md
 ├── rules/
 │   ├── cs_shellcode_stagers.yar    # Shellcode stager prologues
