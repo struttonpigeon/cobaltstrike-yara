@@ -2,10 +2,10 @@
 
 # Cobalt Strike YARA Rule Pack
 
-**24 detection rules + 1 private helper for Cobalt Strike loaders, beacons, and post-exploitation artifacts**
+**25 detection rules + 1 private helper for Cobalt Strike loaders, beacons, and post-exploitation artifacts**
 
 [![YARA](https://img.shields.io/badge/YARA-4.x-blue?style=flat-square)](https://virustotal.github.io/yara/)
-[![Rules](https://img.shields.io/badge/rules-24+1-green?style=flat-square)](#rule-inventory)
+[![Rules](https://img.shields.io/badge/rules-25+1-green?style=flat-square)](#rule-inventory)
 [![CS Version](https://img.shields.io/badge/Cobalt%20Strike-3.x--4.x-red?style=flat-square)](#)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)](#license)
 
@@ -50,15 +50,15 @@ yara rules/cs_sleep_mask.yar process_dump.dmp
 
 | File | Rules | Detection Surface |
 |:-----|:-----:|:------------------|
-| [`cs_shellcode_stagers.yar`](rules/cs_shellcode_stagers.yar) | 5 | x86/x64 stager prologues (`CLD`+`CALL`), PEB walk (MSF + CS variants), ROR-13 API hashing, `Stager_Generic` matches only plaintext-import stagers (not hash-resolving default), embedded shellcode variants |
-| [`cs_reflective_loader.yar`](rules/cs_reflective_loader.yar) | 3+1 | `ReflectiveLoader` export (string + `pe.exports()`), PE-header parsing stub, beacon DLL characteristics, `IsPE` private helper |
-| [`cs_beacon_config.yar`](rules/cs_beacon_config.yar) | 4 | XOR-encoded config blocks (keys `0x69`, `0x2E`) with correct TLV layout, decoded setting IDs, default C2 URI strings |
+| [`cs_shellcode_stagers.yar`](rules/cs_shellcode_stagers.yar) | 5 | Compound ordered sequences: prologue → PEB walk (MSF + CS variants) → ROR-13 API hashing for x86/x64 raw and embedded stagers; `Stager_Generic` matches only plaintext-import stagers (not hash-resolving default) |
+| [`cs_reflective_loader.yar`](rules/cs_reflective_loader.yar) | 4+1 | `ReflectiveLoader` parsed export and name-only variants, PE-header parsing stub, x86 beacon DLL characteristics, `IsPE` private helper |
+| [`cs_beacon_config.yar`](rules/cs_beacon_config.yar) | 4 | Ordered 5-TLV prefix matching (settings 1–5) in decoded, XOR `0x69`, and XOR `0x2E` forms; default C2 URI and spawnto strings |
 | [`cs_named_pipes.yar`](rules/cs_named_pipes.yar) | 2 | Default SMB beacon and post-ex pipe names (`msagent_`, `MSSE-`, `postex_`), malleable C2 profile directives |
 | [`cs_powershell_loaders.yar`](rules/cs_powershell_loaders.yar) | 3 | Generic PowerShell/`.NET`/HTA loaders (match CS + Empire, PowerSploit, Covenant, etc.) |
-| [`cs_sleep_mask.yar`](rules/cs_sleep_mask.yar) | 3 | Sleep mask XOR loop, `VirtualProtect` memory protection flipping, RC4 via `SystemFunction032` — generic patterns, use as supporting evidence |
-| [`cs_watermarks.yar`](rules/cs_watermarks.yar) | 4 | Known cracked/leaked license watermarks (decoded + XOR-encoded), generic watermark field detection |
+| [`cs_sleep_mask.yar`](rules/cs_sleep_mask.yar) | 3 | Compound frame+XOR-loop patterns, ordered `VirtualProtect` protection pairs (RW→RWX), RC4 via `SystemFunction032` — generic patterns, use as supporting evidence |
+| [`cs_watermarks.yar`](rules/cs_watermarks.yar) | 4 | Known cracked/leaked watermarks in decoded, XOR `0x69`, and XOR `0x2E` forms; prefix-anchored structural watermark field detection |
 
-> Every rule includes a `severity` meta field: **critical** (high confidence, CS-specific patterns), **high** (strong indicator, may be shared with other tools — see `shared_with` metadata), or **medium** (supporting evidence, use alongside other detections). Rules shared with Metasploit or generic toolkits are documented via the `shared_with` meta field.
+> Every rule is tagged **`core`** (high-confidence config-block signatures suitable for automated alerting) or **`hunt`** (threat-hunting leads that benefit from human triage or corroborating evidence). Each rule also includes a `severity` meta field: **critical** (known-bad indicators like cracked watermarks), **high** (strong structural signatures), or **medium** (supporting evidence, use alongside other detections). Rules shared with Metasploit or generic toolkits are documented via the `shared_with` meta field.
 
 ## Attack Chain Coverage
 

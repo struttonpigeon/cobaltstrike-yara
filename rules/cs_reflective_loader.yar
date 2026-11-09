@@ -1,22 +1,15 @@
 import "pe"
 
 /*
-    Cobalt Strike — Reflective DLL Loader Detection
-    Author:      struttonpigeon
-    Date:        2026-11-05
-    Reference:   https://github.com/stephenfewer/ReflectiveDLLInjection
-                 https://www.mandiant.com/resources/defining-cobalt-strike-components
+    Reflective-loader and DLL hunting indicators
+    Author: struttonpigeon
+    Date: 2026-11-05
+    Modified: 2026-11-10
 
-    Cobalt Strike beacons are position-independent DLLs injected via
-    reflective loading (Stephen Fewer's technique, modified by Raphael Mudge).
-    The reflective loader parses its own PE headers in-memory, resolves
-    imports, applies relocations, and calls DllMain — all without touching
-    the Windows loader.
-
-    Two detection angles:
-      1. The reflective loader stub itself (exported function + PE-parsing code).
-      2. The "raw" beacon DLL characteristics (unusual section layout, no
-         legitimate imports, specific PE header values).
+    Reflective loading and these byte/string patterns are shared by many
+    tools. A match does not establish Cobalt Strike or malicious intent.
+    These file-oriented rules retain a strict input limit below 5 MiB.
+    They do not reconstruct embedded PEs from a raw process dump.
 */
 
 private rule IsPE
@@ -25,123 +18,103 @@ private rule IsPE
         uint16(0) == 0x5A4D and uint32(uint32(0x3C)) == 0x00004550
 }
 
-rule CobaltStrike_ReflectiveLoader_Export
+rule CobaltStrike_ReflectiveLoader_Export : hunt
 {
     meta:
-        description = "ReflectiveLoader export in a PE — shared with Metasploit and other RDI-based tools, not CS-specific"
+        description = "Parsed ReflectiveLoader export; shared with Metasploit and other RDI-based tools"
         author      = "struttonpigeon"
         date        = "2026-11-05"
+        modified    = "2026-11-10"
         reference   = "https://github.com/stephenfewer/ReflectiveDLLInjection"
-        shared_with = "Metasploit, any tool using Stephen Fewer's RDI"
+        shared_with = "Metasploit and other RDI-based tools"
         severity    = "medium"
         tlp         = "white"
 
-    strings:
-        /*
-            The default export name.  Operators can rename it with the
-            Artifact Kit, but many leave it as-is.  The wide variant
-            catches UTF-16LE strings in some packers.
-        */
-        $export_ascii = "ReflectiveLoader" ascii fullword
-        $export_wide  = "ReflectiveLoader" wide fullword
-
     condition:
-        IsPE and
-        filesize < 5MB and
-        (
-            pe.exports("ReflectiveLoader") or
-            any of ($export_*)
-        )
+        filesize < 5MB and pe.is_pe and pe.exports("ReflectiveLoader")
 }
 
 
-rule CobaltStrike_ReflectiveLoader_Code
+rule CobaltStrike_ReflectiveLoader_Name : hunt
 {
     meta:
-        description = "Generic reflective loader PE-parsing patterns — shared with packers, injectors, and JIT engines"
+        description = "ReflectiveLoader text in a PE-like file without a verified named export"
         author      = "struttonpigeon"
         date        = "2026-11-05"
-        reference   = "https://www.mandiant.com/resources/defining-cobalt-strike-components"
-        shared_with = "Metasploit, packers, other PE injectors"
+        modified    = "2026-11-10"
+        reference   = "https://github.com/stephenfewer/ReflectiveDLLInjection"
+        shared_with = "Metasploit and other RDI-based tools; arbitrary embedded text"
         severity    = "medium"
         tlp         = "white"
 
     strings:
-        /*
-            The reflective loader walks backwards from its own address to
-            find the MZ header.  It checks:
-              - WORD == 'MZ'  (0x5A4D)
-              - then reads e_lfanew to find 'PE\0\0' (0x00004550)
+        $name = "ReflectiveLoader" ascii wide fullword
 
-            Typical x86 code:
-            66 81 3B 4D 5A      CMP WORD PTR [EBX], 0x5A4D    ; 'MZ'
-        */
-        $mz_check = { 66 81 3? 4D 5A }
+    condition:
+        IsPE and filesize < 5MB and $name and
+        not CobaltStrike_ReflectiveLoader_Export
+}
 
-        /*
-            After finding the MZ header the loader validates the PE sig:
-            81 3? 50 45 00 00   CMP DWORD PTR [reg], 0x00004550  ; 'PE\0\0'
-        */
-        $pe_sig_check = { 81 3? 50 45 00 00 }
 
-        /*
-            Section iteration — the loader walks IMAGE_SECTION_HEADER entries
-            to copy sections into the new allocation.  A common pattern is
-            adding sizeof(IMAGE_SECTION_HEADER) == 0x28 (40 bytes) in a loop:
-            83 C? 28            ADD reg, 28h
-        */
-        $section_iter = { 83 C? 28 }
+rule CobaltStrike_ReflectiveLoader_Code : hunt
+{
+    meta:
+        description = "Generic x86 PE-signature comparison and allocation-constant bytes; supporting evidence"
+        author      = "struttonpigeon"
+        date        = "2026-11-05"
+        modified    = "2026-11-10"
+        reference   = "https://www.mandiant.com/resources/defining-cobalt-strike-components"
+        shared_with = "Packers, PE injectors and other native code"
+        severity    = "medium"
+        tlp         = "white"
 
-        /*
-            VirtualAlloc call setup — the loader allocates RWX memory for the
-            beacon image.  The protection constant PAGE_EXECUTE_READWRITE = 0x40:
-            6A 40               PUSH 40h
-            68 00 30 00 00      PUSH 3000h    ; MEM_COMMIT | MEM_RESERVE
-        */
+    strings:
+        /* CMP group /7 with mod=00, simple base-register memory operands:
+           [EAX], [ECX], [EDX], [EBX], [ESI], [EDI]. Exclude 3C (SIB) and
+           3D (disp32), and all /6 XOR forms. */
+        $mz_check = { 66 81 (38|39|3A|3B|3E|3F) 4D 5A }
+
+        $pe_sig_check = { 81 (38|39|3A|3B|3E|3F) 50 45 00 00 }
+
+        /* ADD group /0, register operand. Excludes C8..CF (OR).
+           Adding 40 bytes is compatible with section iteration. */
+        $section_iter = { 83 (C0|C1|C2|C3|C4|C5|C6|C7) 28 }
+
+        /* PUSH 0x40; PUSH 0x3000: constants compatible with an allocation setup. */
         $valloc_rwx = { 6A 40 68 00 30 00 00 }
 
     condition:
-        (
-            uint16(0) == 0x5A4D or   // PE file
-            uint8(0) == 0xFC         // raw shellcode
-        ) and
+        (uint16(0) == 0x5A4D or uint8(0) == 0xFC) and
         filesize < 5MB and
         $mz_check and $pe_sig_check and $section_iter and $valloc_rwx
 }
 
 
-rule CobaltStrike_Beacon_DLL_Characteristics
+rule CobaltStrike_Beacon_DLL_Characteristics : hunt
 {
     meta:
-        description = "Beacon DLL characteristics — beacon.dll string variants with DllMain return stub"
+        description = "Parsed x86 PE32 DLL with beacon name evidence and generic stdcall return bytes"
         author      = "struttonpigeon"
         date        = "2026-11-05"
+        modified    = "2026-11-10"
         reference   = "https://blog.didierstevens.com/2021/11/12/cobalt-strike-understanding-payloads/"
-        severity    = "high"
+        severity    = "medium"
         tlp         = "white"
 
     strings:
-        /*
-            Beacon DLLs contain "beacon.dll" or variant strings in
-            resource data or config blocks.
-            Operators can strip these, but default builds keep them.
-        */
         $cs_str1 = "beacon.dll" ascii nocase
         $cs_str2 = "beacon.x64.dll" ascii nocase
         $cs_str3 = "beacon.x86.dll" ascii nocase
 
-        /*
-            The DLL entry point often just calls a single function and
-            returns TRUE.  This pattern catches the boilerplate:
-            B8 01 00 00 00      MOV EAX, 1
-            C2 0C 00            RET 0Ch    ; stdcall DllMain(3 args)
-            NOTE: This stub is generic MSVC boilerplate and requires
-            at least one $cs_str match to be meaningful.
-        */
+        /* MOV EAX,1; RET 0Ch. Generic x86 stdcall return sequence.
+           There is no x64 DLL-characteristics detector. */
         $dllmain_ret = { B8 01 00 00 00 C2 0C 00 }
 
     condition:
-        IsPE and
+        pe.is_pe and
+        pe.machine == pe.MACHINE_I386 and
+        pe.opthdr_magic == pe.IMAGE_NT_OPTIONAL_HDR32_MAGIC and
+        (pe.characteristics & pe.DLL) != 0 and
         filesize < 5MB and
         any of ($cs_str*) and $dllmain_ret
 }

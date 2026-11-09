@@ -1,150 +1,137 @@
 /*
-    Cobalt Strike — Watermark / License ID Detection
-    Author:      struttonpigeon
-    Date:        2026-11-05
-    Reference:   https://blog.didierstevens.com/2021/11/12/cobalt-strike-understanding-payloads/
-                 https://michaelkoczwara.medium.com/cobalt-strike-watermark-analysis-bc0aecec28cd
+    Beacon setting 37 (0x0025) holds a four-byte big-endian watermark.
+    Author: struttonpigeon
+    Date: 2026-11-05
+    Modified: 2026-11-10
 
-    Every licensed Cobalt Strike installation embeds a 4-byte watermark
-    (license ID) in every beacon it generates.  The watermark occupies
-    setting ID 0x0025 in the beacon configuration block.
+    Structural rules anchor the watermark candidate to a five-setting
+    ordered prefix, within the first 4096 bytes (44 prefix + 4042 gap
+    + 10 watermark = 4096). This is a candidate-field heuristic; it does
+    not parse every intervening TLV or prove a field boundary.
 
-    Cracked or leaked copies of Cobalt Strike reuse a small number of
-    well-known watermarks.  Detecting these values is high-confidence
-    evidence of an unauthorised (and almost certainly malicious) deployment.
+    The cracked-watermark rule matches well-known values from leaked
+    builds. Scan with -s to see candidate regions. XOR the last four
+    bytes with the indicated key for encoded matches.
 
-    Legitimate red-team engagements use unique per-license watermarks that
-    these rules will not match — reducing false positives on authorised use.
-
-    Config setting TLV layout for watermark:
-        00 25   — setting ID (Watermark)
-        00 02   — data type (int, 4 bytes)
-        00 04   — length (4 bytes)
-        XX XX XX XX — the watermark value (big-endian)
+    A watermark does not establish licensing status or authorization.
 */
 
-rule CobaltStrike_Watermark_Cracked_Common
+rule CobaltStrike_Watermark_Cracked_Common : hunt
 {
     meta:
-        description = "Well-known watermarks from cracked/leaked Cobalt Strike builds"
+        description = "Well-known watermarks from cracked/leaked Cobalt Strike builds — decoded, XOR 0x69, and XOR 0x2E"
         author      = "struttonpigeon"
         date        = "2026-11-05"
+        modified    = "2026-11-10"
         reference   = "https://michaelkoczwara.medium.com/cobalt-strike-watermark-analysis-bc0aecec28cd"
         severity    = "critical"
         tlp         = "white"
 
     strings:
-        /*
-            Watermark 0 — the trial/unlicensed value.  Present in
-            evaluation builds and some early cracked copies.
-            Decoded config bytes: 00 25 00 02 00 04 00 00 00 00
-        */
+        /* === Decoded watermark TLVs === */
+
+        /* Watermark 0 — trial/unlicensed value */
         $wm_zero = { 00 25 00 02 00 04 00 00 00 00 }
 
-        /*
-            Watermark 305419896 (0x12345678) — the most widely observed
-            watermark from cracked CS 4.x builds circulated on underground
-            forums.  Decoded config bytes: 00 25 00 02 00 04 12 34 56 78
-        */
+        /* Watermark 305419896 (0x12345678) — most widely observed cracked build */
         $wm_12345678 = { 00 25 00 02 00 04 12 34 56 78 }
 
-        /*
-            Watermark 1359593325 (0x5109BF6D) — from a different leaked build,
-            widely cited in public watermark lists.
-        */
+        /* Watermark 1359593325 (0x5109BF6D) — different leaked build */
         $wm_5109bf6d = { 00 25 00 02 00 04 51 09 BF 6D }
 
+        /* === XOR 0x69 encoded watermark TLVs === */
+
+        $wm_zero_x69     = { 69 4C 69 6B 69 6D 69 69 69 69 }
+        $wm_12345678_x69 = { 69 4C 69 6B 69 6D 7B 5D 3F 11 }
+        $wm_5109bf6d_x69 = { 69 4C 69 6B 69 6D 38 60 D6 04 }
+
+        /* === XOR 0x2E encoded watermark TLVs === */
+
+        $wm_zero_x2e     = { 2E 0B 2E 2C 2E 2A 2E 2E 2E 2E }
+        $wm_12345678_x2e = { 2E 0B 2E 2C 2E 2A 3C 1A 78 56 }
+        $wm_5109bf6d_x2e = { 2E 0B 2E 2C 2E 2A 7F 27 91 43 }
+
     condition:
-        filesize < 5MB and
         any of ($wm_*)
 }
 
 
-rule CobaltStrike_Watermark_XOR69
+rule CobaltStrike_Watermark_Setting_Present : hunt
 {
     meta:
-        description = "Cracked watermarks in XOR-0x69 encoded config blocks"
+        description = "Candidate watermark field near a decoded Beacon config prefix"
         author      = "struttonpigeon"
         date        = "2026-11-05"
-        reference   = "https://blog.didierstevens.com/2021/11/03/cobalt-strike-decoding/"
-        severity    = "critical"
-        tlp         = "white"
-
-    strings:
-        /*
-            The same watermark setting bytes XOR'd with 0x69:
-
-            Original:  00 25 00 02 00 04 XX XX XX XX
-            XOR 0x69:  69 4C 69 6B 69 6D YY YY YY YY
-        */
-        $wm_zero_xor69     = { 69 4C 69 6B 69 6D 69 69 69 69 }
-        $wm_12345678_xor69 = { 69 4C 69 6B 69 6D 7B 5D 3F 11 }
-        $wm_5109bf6d_xor69 = { 69 4C 69 6B 69 6D 38 60 D6 04 }
-
-    condition:
-        filesize < 5MB and
-        any of ($wm_*)
-}
-
-
-rule CobaltStrike_Watermark_XOR2E
-{
-    meta:
-        description = "Cracked watermarks in XOR-0x2E encoded config blocks"
-        author      = "struttonpigeon"
-        date        = "2026-11-05"
-        reference   = "https://blog.didierstevens.com/2021/11/03/cobalt-strike-decoding/"
-        severity    = "critical"
-        tlp         = "white"
-
-    strings:
-        /*
-            Original:  00 25 00 02 00 04 XX XX XX XX
-            XOR 0x2E:  2E 0B 2E 2C 2E 2A YY YY YY YY
-        */
-        $wm_zero_xor2e     = { 2E 0B 2E 2C 2E 2A 2E 2E 2E 2E }
-        $wm_12345678_xor2e = { 2E 0B 2E 2C 2E 2A 3C 1A 78 56 }
-        $wm_5109bf6d_xor2e = { 2E 0B 2E 2C 2E 2A 7F 27 91 43 }
-
-    condition:
-        filesize < 5MB and
-        any of ($wm_*)
-}
-
-
-rule CobaltStrike_Watermark_Setting_Present
-{
-    meta:
-        description = "Generic detection of the watermark setting field in decoded config — any value"
-        author      = "struttonpigeon"
-        date        = "2026-11-05"
+        modified    = "2026-11-10"
         reference   = "https://github.com/Sentinel-One/CobaltStrikeParser"
         severity    = "medium"
         tlp         = "white"
 
     strings:
-        /*
-            The watermark setting header in a decoded config.
-            Setting 0x0025, type 0x0002 (int), length 0x0004.
-            This matches ALL watermarks, not just known-cracked ones.
-            Lower severity — useful for hunting, not alerting.
-        */
-        $wm_header = { 00 25 00 02 00 04 }
-
-        /*
-            Require at least one other beacon config setting nearby
-            to reduce false positives on random byte matches.
-            Setting 0x0001 = BeaconType (short, length 2)
-        */
-        $beacon_type = { 00 01 00 01 00 02 }
-
-        /*
-            Setting 0x0003 = SleepTime (int, length 4)
-        */
-        $sleep_time = { 00 03 00 02 00 04 }
+        $candidate = {
+            00 01 00 01 00 02 00 ??
+            00 02 00 01 00 02 ?? ??
+            00 03 00 02 00 04 ?? ?? ?? ??
+            00 04 00 02 00 04 ?? ?? ?? ??
+            00 05 00 01 00 02 ?? ??
+            [0-4042]
+            00 25 00 02 00 04 ?? ?? ?? ??
+        }
 
     condition:
-        filesize < 5MB and
-        $wm_header and
-        ($beacon_type or $sleep_time)
+        $candidate
+}
+
+
+rule CobaltStrike_Watermark_XOR69 : hunt
+{
+    meta:
+        description = "Candidate watermark field near a Beacon config prefix (XOR key 0x69)"
+        author      = "struttonpigeon"
+        date        = "2026-11-05"
+        modified    = "2026-11-10"
+        reference   = "https://github.com/Sentinel-One/CobaltStrikeParser"
+        severity    = "medium"
+        tlp         = "white"
+
+    strings:
+        $candidate = {
+            69 68 69 68 69 6B 69 ??
+            69 6B 69 68 69 6B ?? ??
+            69 6A 69 6B 69 6D ?? ?? ?? ??
+            69 6D 69 6B 69 6D ?? ?? ?? ??
+            69 6C 69 68 69 6B ?? ??
+            [0-4042]
+            69 4C 69 6B 69 6D ?? ?? ?? ??
+        }
+
+    condition:
+        $candidate
+}
+
+
+rule CobaltStrike_Watermark_XOR2E : hunt
+{
+    meta:
+        description = "Candidate watermark field near a Beacon config prefix (XOR key 0x2E)"
+        author      = "struttonpigeon"
+        date        = "2026-11-05"
+        modified    = "2026-11-10"
+        reference   = "https://github.com/Sentinel-One/CobaltStrikeParser"
+        severity    = "medium"
+        tlp         = "white"
+
+    strings:
+        $candidate = {
+            2E 2F 2E 2F 2E 2C 2E ??
+            2E 2C 2E 2F 2E 2C ?? ??
+            2E 2D 2E 2C 2E 2A ?? ?? ?? ??
+            2E 2A 2E 2C 2E 2A ?? ?? ?? ??
+            2E 2B 2E 2F 2E 2C ?? ??
+            [0-4042]
+            2E 0B 2E 2C 2E 2A ?? ?? ?? ??
+        }
+
+    condition:
+        $candidate
 }
