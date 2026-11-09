@@ -40,6 +40,9 @@
 #                            CobaltStrike_ReflectiveLoader_Export
 #      - ps1_cradle       -> Generic_PowerShell_Obfuscated_Loader
 #      - hta_stager       -> Generic_HTA_VBS_Loader
-#      - config_decoded   -> CobaltStrike_Beacon_Config_Decoded,
-#                            CobaltStrike_Watermark_Cracked_Common
+#      - config_decoded   -> CobaltStrike_Beacon_Config_Decoded
+#      - config_xor69     -> CobaltStrike_Beacon_Config_XOR69
+#      - config_xor2e     -> CobaltStrike_Beacon_Config_XOR2E
+#      - cracked_beacon   -> CobaltStrike_Watermark_Cracked_Common
+#                            (if watermark is 0, 0x12345678, or 0x5109BF6D)
 #      - malleable_profile -> CobaltStrike_Named_Pipes_Strings_Only
