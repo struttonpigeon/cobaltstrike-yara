@@ -99,7 +99,10 @@ rule CobaltStrike_Shellcode_Stager_x86_Embedded : hunt
         }
 
     condition:
-        for any i in (1..#sequence) : (@sequence[i] > 0)
+        /* Match offsets are reported in ascending order, so the last
+           match is at a nonzero offset iff any match is. O(1), unlike a
+           loop over every match (yara-x: potentially_slow_loop). */
+        @sequence[#sequence] > 0
 }
 
 
@@ -125,31 +128,15 @@ rule CobaltStrike_Shellcode_Stager_x64_Embedded : hunt
         }
 
     condition:
-        for any i in (1..#sequence) : (@sequence[i] > 0)
+        /* Match offsets are reported in ascending order, so the last
+           match is at a nonzero offset iff any match is. O(1), unlike a
+           loop over every match (yara-x: potentially_slow_loop). */
+        @sequence[#sequence] > 0
 }
 
-
-rule CobaltStrike_Shellcode_Stager_Generic : hunt
-{
-    meta:
-        description = "CLD-prefixed bytes with plaintext WinInet/API/User-Agent strings; generic hunting evidence"
-        author      = "struttonpigeon"
-        date        = "2026-11-05"
-        modified    = "2026-11-10"
-        reference   = "https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2_http-staging.htm"
-        shared_with = "Other loaders containing the same plaintext strings"
-        severity    = "medium"
-        tlp         = "white"
-
-    strings:
-        $ua_default = "Mozilla/5.0 (compatible; MSIE 9.0; Windows NT 6.1; Trident/5.0)" ascii
-        $wininet    = "wininet" ascii nocase
-        $httpopen   = "HttpOpenRequestA" ascii
-        $interneto  = "InternetOpenA" ascii
-
-    condition:
-        uint8(0) == 0xFC and
-        $wininet and
-        ($httpopen or $interneto) and
-        $ua_default
-}
+/*
+    CobaltStrike_Shellcode_Stager_Generic was removed on 2026-11-10.
+    It required a plaintext "wininet" string, plaintext WinInet API names
+    and one exact User-Agent, but default stagers resolve APIs by hash
+    and their User-Agent varies, so it could essentially never match.
+*/

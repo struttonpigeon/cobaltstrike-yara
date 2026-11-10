@@ -18,7 +18,35 @@
     NOTE: Named pipes alone are weak indicators — legitimate software also
     uses them.  These rules are most useful as supporting evidence alongside
     other CS-specific detections.
+
+    WHERE THESE CAN FIRE: in a beacon DLL the pipe names live inside the
+    XOR-encoded config block, and the default Artifact Kit assembles the
+    "\\.\pipe\" prefix at runtime, so the full UNC strings below rarely
+    exist in files on disk. CobaltStrike_Named_Pipes_Default is mainly
+    useful on decoded memory. CobaltStrike_ArtifactKit_Pipe_Format
+    targets the format string that IS present in default Artifact Kit
+    executables; it is file-only (MZ header and size cap), so it does not
+    fire on live-process scans, where filesize is undefined.
 */
+
+rule CobaltStrike_ArtifactKit_Pipe_Format : hunt
+{
+    meta:
+        description = "Default Artifact Kit pipe-name format string (MSSE-<n>-server) in a PE file"
+        author      = "struttonpigeon"
+        date        = "2026-11-10"
+        modified    = "2026-11-10"
+        reference   = "https://thedfirreport.com/2021/08/29/cobalt-strike-a-defenders-guide/"
+        severity    = "high"
+        tlp         = "white"
+
+    strings:
+        $fmt = "MSSE-%d-server" ascii wide
+
+    condition:
+        uint16(0) == 0x5A4D and filesize < 10MB and $fmt
+}
+
 
 rule CobaltStrike_Named_Pipes_Default : hunt
 {
@@ -38,11 +66,12 @@ rule CobaltStrike_Named_Pipes_Default : hunt
         $pipe_status    = "\\\\.\\pipe\\status_"     ascii wide nocase
 
     condition:
-        filesize < 50MB and
-        (
-            (($pipe_msagent or $pipe_msse) and any of ($pipe_postex, $pipe_status)) or
-            ($pipe_msagent and $pipe_msse)
-        )
+        /* No filesize cap: this rule targets memory. A cap silently
+           skipped dumps >= 50MB, and filesize is undefined when scanning
+           a running process (yara <rules> <pid>), which made the whole
+           condition false there. */
+        (($pipe_msagent or $pipe_msse) and any of ($pipe_postex, $pipe_status)) or
+        ($pipe_msagent and $pipe_msse)
 }
 
 

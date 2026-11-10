@@ -9,8 +9,11 @@
     Every Cobalt Strike beacon embeds a configuration block that tells it
     where to call home, how often to sleep, which named pipes to use, etc.
 
-    The supported XOR keys are 0x69 and 0x2E. These byte patterns alone
-    do not establish a product version.
+    The supported XOR keys are 0x69 and 0x2E. Configs encoded with a
+    custom key (0xCC and 0xAF were seen in public CS 4.3/4.4 test
+    Beacons) are NOT matched in encoded form; decode them first and
+    scan the result with CobaltStrike_Beacon_Config_Decoded. These byte
+    patterns alone do not establish a product version.
 
     Each config entry follows the TLV layout:
         setting_id (2 bytes, big-endian)
@@ -21,6 +24,20 @@
     The core rules match five consecutive ordered TLVs (settings 1-5):
     BeaconType, Port, SleepTime, MaxGetSize, Jitter.
     Total prefix: 8+8+10+10+8 = 44 bytes.
+
+    SCOPE: these rules match the serialized TLV config block, as found in
+    a decrypted beacon DLL or a memory region still holding that block.
+    They do not match (a) the parsed settings table a running beacon
+    builds on the heap after reading the config, or (b) original payload
+    files whose beacon is wrapped in an additional encoding layer.
+
+    EXTERNAL VALIDATION (independent review, commit 84c3ccf): in eight
+    public dissect.cobaltstrike test Beacons (CS 4.2-4.12), the extracted
+    decoded config matched CobaltStrike_Beacon_Config_Decoded in 8/8;
+    the XOR2E rule matched every fully decoded stage that used key 0x2E; the
+    original payload files matched no core rule (0/8). Hashes and
+    per-representation results: samples/known_hashes.txt. No in-repo
+    positive fixture exists yet; see tests/expected.json.
 */
 
 rule CobaltStrike_Beacon_Config_XOR69 : core

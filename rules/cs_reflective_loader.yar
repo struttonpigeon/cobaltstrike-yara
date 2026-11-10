@@ -31,7 +31,11 @@ rule CobaltStrike_ReflectiveLoader_Export : hunt
         tlp         = "white"
 
     condition:
-        filesize < 5MB and pe.is_pe and pe.exports("ReflectiveLoader")
+        /* x86 builds usually export the stdcall-decorated name
+           "_ReflectiveLoader@4"; pe.exports() with a plain string is an
+           exact-name match, so a regex is needed to cover both. */
+        filesize < 5MB and pe.is_pe and
+        pe.exports(/^_?ReflectiveLoader(@[0-9]+)?$/)
 }
 
 
@@ -93,7 +97,7 @@ rule CobaltStrike_ReflectiveLoader_Code : hunt
 rule CobaltStrike_Beacon_DLL_Characteristics : hunt
 {
     meta:
-        description = "Parsed x86 PE32 DLL with beacon name evidence and generic stdcall return bytes"
+        description = "Parsed PE DLL (x86 or x64) whose export-directory name is a default beacon DLL name"
         author      = "struttonpigeon"
         date        = "2026-11-05"
         modified    = "2026-11-10"
@@ -101,20 +105,14 @@ rule CobaltStrike_Beacon_DLL_Characteristics : hunt
         severity    = "medium"
         tlp         = "white"
 
-    strings:
-        $cs_str1 = "beacon.dll" ascii nocase
-        $cs_str2 = "beacon.x64.dll" ascii nocase
-        $cs_str3 = "beacon.x86.dll" ascii nocase
-
-        /* MOV EAX,1; RET 0Ch. Generic x86 stdcall return sequence.
-           There is no x64 DLL-characteristics detector. */
-        $dllmain_ret = { B8 01 00 00 00 C2 0C 00 }
-
     condition:
-        pe.is_pe and
-        pe.machine == pe.MACHINE_I386 and
-        pe.opthdr_magic == pe.IMAGE_NT_OPTIONAL_HDR32_MAGIC and
-        (pe.characteristics & pe.DLL) != 0 and
+        /* pe.dll_name is the Name field of the parsed export directory,
+           so this cannot be satisfied by the text appearing elsewhere in
+           the file. A malleable profile's stage.name changes this value. */
         filesize < 5MB and
-        any of ($cs_str*) and $dllmain_ret
+        pe.is_pe and
+        (pe.characteristics & pe.DLL) != 0 and
+        /* "matches" with /i rather than iequals, which needs a newer
+           YARA 4.x release than the rest of this pack. */
+        pe.dll_name matches /^beacon(\.x64)?\.dll$/i
 }
