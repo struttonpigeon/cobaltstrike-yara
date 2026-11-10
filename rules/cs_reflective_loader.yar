@@ -76,9 +76,9 @@ rule CobaltStrike_ReflectiveLoader_Code : hunt
 
         $pe_sig_check = { 81 (38|39|3A|3B|3E|3F) 50 45 00 00 }
 
-        /* ADD group /0, register operand. Excludes C8..CF (OR).
-           Adding 40 bytes is compatible with section iteration. */
-        $section_iter = { 83 (C0|C1|C2|C3|C4|C5|C6|C7) 28 }
+        /* ADD group /0, register operand followed by a short conditional
+           jump (loop back). Adding 40 bytes is the section-header stride. */
+        $section_iter = { 83 (C0|C1|C2|C3|C4|C5|C6|C7) 28 [0-12] 75 ?? }
 
         /* PUSH 0x40; PUSH 0x3000: constants compatible with an allocation setup. */
         $valloc_rwx = { 6A 40 68 00 30 00 00 }

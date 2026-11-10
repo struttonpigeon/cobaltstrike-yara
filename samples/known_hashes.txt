@@ -34,8 +34,9 @@
 #   3. Expected matches per sample type:
 #      - x86_stager       -> CobaltStrike_Shellcode_Stager_x86
 #      - x64_stager       -> CobaltStrike_Shellcode_Stager_x64
-#      - beacon_x86/x64   -> CobaltStrike_Beacon_DLL_Characteristics,
+#      - beacon_x86       -> CobaltStrike_Beacon_DLL_Characteristics,
 #                            CobaltStrike_ReflectiveLoader_Export
+#      - beacon_x64       -> CobaltStrike_ReflectiveLoader_Export
 #      - reflective_dll   -> CobaltStrike_ReflectiveLoader_Code,
 #                            CobaltStrike_ReflectiveLoader_Export
 #      - ps1_cradle       -> Generic_PowerShell_Obfuscated_Loader

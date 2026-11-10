@@ -9,7 +9,7 @@
 [![CS Version](https://img.shields.io/badge/Cobalt%20Strike-3.x--4.x-red?style=flat-square)](#)
 [![License](https://img.shields.io/badge/license-MIT-lightgrey?style=flat-square)](#license)
 
-[Quick Start](#quick-start) | [Rule Inventory](#rule-inventory) | [Methodology](#methodology) | [Limitations](#limitations--evasion)
+[Quick Start](#quick-start) | [Rule Inventory](#rule-inventory) | [Methodology](#methodology) | [Known FPs](#known-false-positives) | [Limitations](#limitations--evasion)
 
 </div>
 
@@ -21,7 +21,7 @@ This document was inspired by my wonderful internal red team who should really u
 
 This is a curated set of YARA rules that detect **Cobalt Strike** artifacts across every stage of the attack chain. Should cover initial shellcode stagers through in-memory beacon configurations. Each rule is heavily commented, explaining exactly which bytes are matched and why, making this useful both as a detection toolset and a learning resource.
 
-These rules target default and lightly customised CS deployments (versions 3.x through 4.x), which still account for the majority of Cobalt Strike usage observed in the wild. Operators using Artifact Kit, UDRL, or Sleep Mask Kit modifications will evade many of these signatures — see [Limitations](#limitations--evasion) below.
+These rules target default and lightly customised CS deployments (versions 3.x through 4.x based on public reports; no verified sample hashes are included — see [`samples/known_hashes.txt`](samples/known_hashes.txt)). Operators using Artifact Kit, UDRL, or Sleep Mask Kit modifications will evade many of these signatures — see [Limitations](#limitations--evasion) below.
 
 For those of you whose red team uses CS without obfuscation... COUGH COUGH this is for you.
 
@@ -39,8 +39,8 @@ yara rules/cs_beacon_config.yar suspect.bin
 for rulefile in rules/*.yar; do yara "$rulefile" /path/to/samples/; done
 
 # Or compile first, then scan a directory recursively
-yarac -C rules/*.yar compiled.yarc
-yara -r compiled.yarc /path/to/samples/
+yarac rules/*.yar compiled.yarc
+yara -C -r compiled.yarc /path/to/samples/
 
 # Scan a memory dump
 yara rules/cs_sleep_mask.yar process_dump.dmp
@@ -55,10 +55,10 @@ yara rules/cs_sleep_mask.yar process_dump.dmp
 | [`cs_beacon_config.yar`](rules/cs_beacon_config.yar) | 4 | Ordered 5-TLV prefix matching (settings 1–5) in decoded, XOR `0x69`, and XOR `0x2E` forms; default C2 URI and spawnto strings |
 | [`cs_named_pipes.yar`](rules/cs_named_pipes.yar) | 2 | Default SMB beacon and post-ex pipe names (`msagent_`, `MSSE-`, `postex_`), malleable C2 profile directives |
 | [`cs_powershell_loaders.yar`](rules/cs_powershell_loaders.yar) | 3 | Generic PowerShell/`.NET`/HTA loaders (match CS + Empire, PowerSploit, Covenant, etc.) |
-| [`cs_sleep_mask.yar`](rules/cs_sleep_mask.yar) | 3 | Compound frame+XOR-loop patterns, ordered `VirtualProtect` protection pairs (RW→RWX), RC4 via `SystemFunction032` — generic patterns, use as supporting evidence |
+| [`cs_sleep_mask.yar`](rules/cs_sleep_mask.yar) | 3 | Compound frame+XOR-loop patterns, ordered `VirtualProtect` protection pairs (RW→RWX and RW→RX for CS 4.10+ `userwx=false`), RC4 via `SystemFunction032` — generic patterns, use as supporting evidence |
 | [`cs_watermarks.yar`](rules/cs_watermarks.yar) | 4 | Known cracked/leaked watermarks in decoded, XOR `0x69`, and XOR `0x2E` forms; prefix-anchored structural watermark field detection |
 
-> Every rule is tagged **`core`** (high-confidence config-block signatures suitable for automated alerting) or **`hunt`** (threat-hunting leads that benefit from human triage or corroborating evidence). Each rule also includes a `severity` meta field: **critical** (known-bad indicators like cracked watermarks), **high** (strong structural signatures), or **medium** (supporting evidence, use alongside other detections). Rules shared with Metasploit or generic toolkits are documented via the `shared_with` meta field.
+> Every rule is tagged **`core`** (config-block signatures with low expected FP rate, but see [Known False Positives](#known-false-positives) below) or **`hunt`** (threat-hunting leads that benefit from human triage or corroborating evidence). Each rule also includes a `severity` meta field: **critical** (known-bad indicators like cracked watermarks), **high** (strong structural signatures), or **medium** (supporting evidence, use alongside other detections). Rules shared with Metasploit or generic toolkits are documented via the `shared_with` meta field.
 
 ## Attack Chain Coverage
 
@@ -95,8 +95,6 @@ yara rules/cs_sleep_mask.yar process_dump.dmp
 3. **Compute XOR variants** — pre-compute encoded byte patterns for the two most common config XOR keys (`0x69` and `0x2E`), including the full TLV layout (setting ID + type + length + value).
 4. **Layer conditions** — require multiple string matches per rule to prevent noise from partial byte collisions.
 
-> **Note:** Formal false-positive testing against a corpus of non-CS samples (Metasploit, Sliver, Brute Ratel, clean PEs) has not been performed. Community contributions of FP test results are welcome.
-
 ## Test Samples
 
 [`samples/known_hashes.txt`](samples/known_hashes.txt) is a template for community-contributed sample hashes. No hashes are included by default — see the file for the expected format and contribution instructions. To validate a sample you have obtained from a public repository:
@@ -114,6 +112,19 @@ for rulefile in rules/*.yar; do yara "$rulefile" sample.bin; done
 ```
 
 > **Handle all samples in an isolated analysis VM. Never execute on production systems.**
+
+## Known False Positives
+
+The `hunt`-tagged rules use generic byte patterns that appear in legitimate software. A convenience scan of 505 Windows system DLLs produced three matches on Microsoft-signed libraries:
+
+| Rule | File | Why It Matches |
+|:-----|:-----|:---------------|
+| `CobaltStrike_SleepMask_RC4_SystemFunction032` | `advapi32.dll`, `kernelbase.dll` | These DLLs export `SystemFunction032` (the RC4 API the rule looks for) |
+| `CobaltStrike_SleepMask_VirtualProtect` | `urlmon.dll` | Contains VirtualProtect + Sleep imports alongside matching protection-constant byte sequences |
+
+These are expected. The sleep mask rules are designed as supporting evidence, not standalone alerts — corroborate with config-block or stager matches before escalating. The `core`-tagged config rules were clean against the same corpus but have not been tested against a broader non-CS malware set.
+
+> **Note:** Formal false-positive testing against a large corpus (Metasploit, Sliver, Brute Ratel, clean PEs) has not been performed. Community contributions of FP test results are welcome.
 
 ## Limitations & Evasion
 

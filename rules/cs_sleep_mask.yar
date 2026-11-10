@@ -40,7 +40,7 @@ rule CobaltStrike_SleepMask_XOR_Stub : hunt
         */
         $frame_loop_x86 = {
             55 89 E5 83 EC ?? 53 56 57
-            [0-503]
+            [0-255]
             30 (10|11|12|13|16|17|18|19|1A|1B|1E|1F) [0-4] 4? 4? 75 ??
         }
 
@@ -50,7 +50,7 @@ rule CobaltStrike_SleepMask_XOR_Stub : hunt
         */
         $frame_loop_x64 = {
             48 89 5C 24 ?? 48 89 6C 24 ??
-            [0-502]
+            [0-255]
             41 30 (10|11|12|13|16|17|18|19|1A|1B|1E|1F)
             48 FF (C0|C1|C2|C3|C4|C5|C6|C7)
             48 FF (C8|C9|CA|CB|CC|CD|CE|CF) 75 ??
@@ -75,27 +75,31 @@ rule CobaltStrike_SleepMask_VirtualProtect : hunt
         tlp         = "white"
 
     strings:
+        /* Known benign matches: urlmon.dll (VirtualProtect + Sleep + protection constants).
+           Corroborate with config or stager evidence before escalating. */
         $vp_str   = "VirtualProtect" ascii
         $sleep_fn = "Sleep" ascii fullword
 
         /*
             x86: PUSH imm8 within eight bytes of an indirect CALL.
-            Compound pattern: RW setup/call then RWX setup/call within 512 bytes.
+            Compound pattern: RW setup/call then RWX or RX restoration within 512 bytes.
+            0x40 = PAGE_EXECUTE_READWRITE, 0x20 = PAGE_EXECUTE_READ (userwx=false, CS 4.10+).
         */
         $protection_pair_x86 = {
             6A 04 [0-8] FF 15 ?? ?? ?? ??
             [0-512]
-            6A 40 [0-8] FF 15 ?? ?? ?? ??
+            6A (20|40) [0-8] FF 15 ?? ?? ?? ??
         }
 
         /*
             x64: MOV R8D-R15D, imm32 within 24 bytes of an indirect call.
             Wider register range covers compiler variation in register allocation.
+            0x40 = PAGE_EXECUTE_READWRITE, 0x20 = PAGE_EXECUTE_READ (userwx=false, CS 4.10+).
         */
         $protection_pair_x64 = {
             41 (B8|B9|BA|BB|BC|BD|BE|BF) 04 00 00 00 [0-24] FF 15 ?? ?? ?? ??
             [0-512]
-            41 (B8|B9|BA|BB|BC|BD|BE|BF) 40 00 00 00 [0-24] FF 15 ?? ?? ?? ??
+            41 (B8|B9|BA|BB|BC|BD|BE|BF) (20|40) 00 00 00 [0-24] FF 15 ?? ?? ?? ??
         }
 
     condition:
