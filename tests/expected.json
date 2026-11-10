@@ -1,0 +1,38 @@
+{
+  "_comment": "Exact rule set each test blob must produce. Empty list = negative test. Update this file in the same commit as any rule change.",
+  "blobs": {
+    "test_reflective_loader.bin": ["CobaltStrike_ReflectiveLoader_Name"],
+    "test_watermark_decoded.bin": [],
+    "test_watermark_xor2e.bin": [],
+    "test_watermark_xor69.bin": [],
+    "test_x64_stager.bin": ["CobaltStrike_Shellcode_Stager_x64"],
+    "test_x64_wrong_ror.bin": [],
+    "test_x86_embedded.bin": ["CobaltStrike_Shellcode_Stager_x86_Embedded"],
+    "test_x86_stager.bin": ["CobaltStrike_Shellcode_Stager_x86"],
+    "test_x86_stager_cs.bin": ["CobaltStrike_Shellcode_Stager_x86"]
+  },
+  "pending_positive_fixtures": [
+    "CobaltStrike_Beacon_Config_Decoded",
+    "CobaltStrike_Beacon_Config_XOR69",
+    "CobaltStrike_Beacon_Config_XOR2E",
+    "CobaltStrike_Beacon_Config_Strings",
+    "CobaltStrike_Watermark_Cracked_Common",
+    "CobaltStrike_Watermark_Zero",
+    "CobaltStrike_Watermark_Setting_Present",
+    "CobaltStrike_Watermark_XOR69",
+    "CobaltStrike_Watermark_XOR2E",
+    "CobaltStrike_ReflectiveLoader_Export",
+    "CobaltStrike_ReflectiveLoader_Code",
+    "CobaltStrike_Beacon_DLL_Characteristics",
+    "CobaltStrike_Shellcode_Stager_x64_Embedded",
+    "CobaltStrike_Named_Pipes_Default",
+    "CobaltStrike_Named_Pipes_Strings_Only",
+    "CobaltStrike_ArtifactKit_Pipe_Format",
+    "Generic_PowerShell_Obfuscated_Loader",
+    "Generic_DotNet_Assembly_Loader",
+    "Generic_HTA_VBS_Loader",
+    "CobaltStrike_SleepMask_XOR_Stub",
+    "CobaltStrike_SleepMask_VirtualProtect",
+    "CobaltStrike_SleepMask_RC4_SystemFunction032"
+  ]
+}

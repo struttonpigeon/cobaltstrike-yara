@@ -17,7 +17,15 @@
     Detection layers:
       1. PowerShell cradle templates (IEX download, encoded command)
       2. .NET in-memory assembly loading patterns
-      3. HTA / VBS / VBA macro wrappers
+      3. HTA / VBScript wrappers (there is no VBA macro rule yet)
+
+    Only Generic_DotNet_Assembly_Loader skips files that start with an MZ
+    header: compiled .NET assemblies (mscorlib, System.XML, ...) and
+    native DLLs legitimately contain the same API and type names (25
+    benign Windows matches before the skip, 0 after). The PowerShell and
+    HTA rules deliberately still scan PE files: a public Cobalt Strike
+    4.10 test Beacon (dissect.cobaltstrike "guardrails_beacon") matched
+    the PowerShell rule as a PE, and neither rule had benign PE matches.
 */
 
 rule Generic_PowerShell_Obfuscated_Loader : hunt
@@ -83,6 +91,7 @@ rule Generic_DotNet_Assembly_Loader : hunt
 
     condition:
         filesize < 5MB and
+        uint16(0) != 0x5A4D and
         (
             ($asm_load and $from_base64) or
             ($asm_load2 and $convert) or
@@ -104,7 +113,10 @@ rule Generic_HTA_VBS_Loader : hunt
         tlp         = "white"
 
     strings:
-        $hta_tag      = "<script language=\"VBScript\">" ascii wide nocase
+        /* <script ... language = "VBScript"> with single, double or no
+           quotes, other attributes first, and spaces around "=". Bounded
+           so the regex cannot run away. */
+        $hta_tag      = /<script[^>]{0,64}language[ \t]{0,4}=[ \t]{0,4}["']?vbscript/ ascii wide nocase
         $shell_run    = "Wscript.Shell" ascii wide nocase
         $shell_exec   = ".Run" ascii wide nocase
         $powershell   = "powershell" ascii wide nocase

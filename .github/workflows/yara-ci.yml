@@ -1,0 +1,30 @@
+name: yara-rules
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - engine: libyara
+            package: yara-python==4.5.4
+          - engine: yarax
+            package: yara-x==1.23.0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install ${{ matrix.engine }}
+        run: python -m pip install "${{ matrix.package }}"
+      - name: Compile rules and run blob tests
+        run: python tests/run_tests.py --engine ${{ matrix.engine }}

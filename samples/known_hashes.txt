@@ -1,16 +1,81 @@
 # Cobalt Strike — Known Sample Hashes for Rule Validation
 # ========================================================
 #
-# This file is a placeholder for community-contributed sample hashes.
-# No verified hashes are currently available.
+# Hashes of public samples used to validate these rules. No sample files
+# are stored in this repository.
 #
-# IMPORTANT: Download samples only from authorised malware repositories
-# (MalwareBazaar, VirusTotal, Hybrid Analysis) and handle them in an
-# isolated analysis environment.  Never execute samples on production
-# systems.
+# IMPORTANT: Download samples only from authorised sources (the
+# dissect.cobaltstrike test suite below, MalwareBazaar, VirusTotal,
+# Hybrid Analysis) and handle them in an isolated analysis environment.
+# Never execute samples on production systems.
 #
 # Format:  SHA256  |  Type  |  Source / Reference
 # --------------------------------------------------------
+#
+# =====================================================================
+# Public test Beacons — fox-it/dissect.cobaltstrike test suite
+# =====================================================================
+# Source: https://github.com/fox-it/dissect.cobaltstrike/tree/fb1a38e779d2e4fd68c3d9b4a8d001c704e992bc/tests/beacons
+# Each archive's MD5 is its upstream filename. Versions are
+# parser-derived estimates (dissect.cobaltstrike 1.3.0), not attested
+# build provenance. Results observed by an independent review at
+# commit 84c3ccf (2026-11-10), statically, without execution.
+#
+# Representations:
+#   raw     = original archived payload file
+#   stage   = after removing the outer payload encoding (XorEncodedFile /
+#             ObfuscatedBeacon), e.g. with dissect.cobaltstrike or 1768.py
+#   config  = extracted, decoded config block
+#
+# ---- RE-VALIDATE after the 2026-11-10 rule changes: watermark rules are
+# now prefix-anchored (watermark 0 -> CobaltStrike_Watermark_Zero), the
+# VirtualProtect gap is now 200 bytes, _Export accepts decorated names
+# (which turns some _Name results into _Export), and
+# Beacon_DLL_Characteristics now uses pe.dll_name.
+#
+# 8b7661d448efbc86e55b702017a5699c0163e8d501d5c20b24a975baa04ef108 | beacon_x86, CS 4.2 x86, key 0x2E, wm 1359593325 | 4f571c0bc97c20eefc58fa3faf32148d.bin.zip
+#   raw:    (none)
+#   stage:  Beacon_Config_XOR2E, Watermark_Cracked_Common, Watermark_XOR2E
+#   config: Beacon_Config_Decoded, Watermark_Cracked_Common, Watermark_Setting_Present
+#
+# d6bb1710f217844b93be3290e9012c6758c70db3190b4bee2c8167c41d71476d | beacon_x64, CS 4.3 x64, key 0x2E, wm 0 | 1897a6cdf17271807bd6ec7c60fffea3.bin.zip
+#   raw:    (none)
+#   stage:  Beacon_Config_XOR2E, Watermark_Cracked_Common (now: Watermark_Zero), Watermark_XOR2E
+#   config: Beacon_Config_Decoded, Watermark_Cracked_Common (now: Watermark_Zero), Watermark_Setting_Present
+#
+# 6b9d274df945b86f3bcb3956c59e4697e2e543973d14026157440bb12a382868 | beacon_custom_xorkey, CS 4.4 x86, CUSTOM key 0xCC, wm 1234567890 | 3fdf92571d10485b05904e35c635c655.bin.zip
+#   raw:    (none)
+#   stage:  (none — custom config XOR key is unsupported)
+#   config: Beacon_Config_Decoded, Beacon_Config_Strings, Watermark_Setting_Present
+#
+# e2c6802160dbc8418472028c340f5ed1a98f39d5aa6eebd15e11d2b40789cea9 | dns_beacon, CS 4.3 x86, CUSTOM key 0xAF, wm 426352781 | a1573fe60c863ed40fffe54d377b393a.bin.zip
+#   raw:    (none)
+#   config: Beacon_Config_Decoded, Watermark_Setting_Present
+#
+# b5284370b3ff65059cf3ffe2928530286a6c5f97f237c644dc92ac86daed2693 | c2test_beacon, CS 4.2 x86, key 0x2E, wm 0 | 37882262c9b5e971067fd989b26afe28.bin.zip
+#   raw:    (none)
+#   stage:  Beacon_Config_XOR2E, ReflectiveLoader_Name, SleepMask_VirtualProtect,
+#           Watermark_Cracked_Common (now: Watermark_Zero), Watermark_XOR2E,
+#           Generic_PowerShell_Obfuscated_Loader
+#   config: Beacon_Config_Decoded, Beacon_Config_Strings,
+#           Watermark_Cracked_Common (now: Watermark_Zero), Watermark_Setting_Present
+#
+# 4e208477289dcec236d717b50a78a64ffc02f09992388cedd2bd8187ef2a6220 | punycode_beacon, CS 4.2 x86, key 0x2E, wm 395661524 | 5a197a8bb628a2555f5a86c51b85abd7.bin.zip
+#   raw:    (none)
+#   stage:  Beacon_Config_XOR2E, ReflectiveLoader_Name, SleepMask_VirtualProtect, Watermark_XOR2E
+#   config: Beacon_Config_Decoded, Watermark_Setting_Present
+#
+# bd4d5b722ac9f1902b2d8fe65ee68ebd61aadf07f659d85b2c6c3158e65a0873 | guardrails_beacon, CS 4.10 x64, key 0x2E, wm 1000427167 | 124552cf674b362e0c916ab79b9e7a56.bin.zip
+#   raw:    ReflectiveLoader_Export, Generic_PowerShell_Obfuscated_Loader
+#   config: Beacon_Config_Decoded, Beacon_Config_Strings, Watermark_Setting_Present
+#
+# 046f759571844e36c6503cab294b599cec936a688b78fff0a725660b09cb5532 | transform_obfuscate_beacon, CS 4.12 x86, key 0x2E, wm 433038339 | d972234f6b1e2f3635b24c9754e2b252.bin.zip
+#   raw:    (none)
+#   stage (BASE64 / XOR / RC4 transform layers): (none)
+#   stage (LZNT1 and NONE layers): Beacon_Config_XOR2E, Watermark_XOR2E
+#   config: Beacon_Config_Decoded, Watermark_Setting_Present
+#
+# No Cobalt Strike 3.x sample has been validated.
 #
 # To contribute a hash:
 #   1. Confirm the sample exists in MalwareBazaar or VirusTotal
@@ -29,14 +94,17 @@
 #        -d "query=get_file&sha256_hash=<HASH>"
 #
 #   2. Run YARA rules against the sample:
-#      for rulefile in rules/*.yar; do yara "$rulefile" sample.bin; done
+#      yara index.yar sample.bin
 #
-#   3. Expected matches per sample type:
+#   3. Expected matches per sample type (default, unmodified builds):
 #      - x86_stager       -> CobaltStrike_Shellcode_Stager_x86
 #      - x64_stager       -> CobaltStrike_Shellcode_Stager_x64
 #      - beacon_x86       -> CobaltStrike_Beacon_DLL_Characteristics,
 #                            CobaltStrike_ReflectiveLoader_Export
-#      - beacon_x64       -> CobaltStrike_ReflectiveLoader_Export
+#                            (decorated _ReflectiveLoader@4 export)
+#      - beacon_x64       -> CobaltStrike_Beacon_DLL_Characteristics,
+#                            CobaltStrike_ReflectiveLoader_Export
+#      - artifact_kit_exe -> CobaltStrike_ArtifactKit_Pipe_Format
 #      - reflective_dll   -> CobaltStrike_ReflectiveLoader_Code,
 #                            CobaltStrike_ReflectiveLoader_Export
 #      - ps1_cradle       -> Generic_PowerShell_Obfuscated_Loader
@@ -45,5 +113,7 @@
 #      - config_xor69     -> CobaltStrike_Beacon_Config_XOR69
 #      - config_xor2e     -> CobaltStrike_Beacon_Config_XOR2E
 #      - cracked_beacon   -> CobaltStrike_Watermark_Cracked_Common
-#                            (if watermark is 0, 0x12345678, or 0x5109BF6D)
+#                            (if watermark is 0x12345678 or 0x5109BF6D)
+#      - trial_beacon     -> CobaltStrike_Watermark_Zero
+#                            (watermark 0)
 #      - malleable_profile -> CobaltStrike_Named_Pipes_Strings_Only
