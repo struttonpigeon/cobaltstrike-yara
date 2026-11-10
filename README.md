@@ -28,29 +28,88 @@ For those of you whose red team uses CS without obfuscation... COUGH COUGH this 
 
 ## Quick Start
 
+> [!IMPORTANT]
+> **Decode payload files before you scan them.** Cobalt Strike payloads are wrapped in an outer encoding layer that hides the Beacon config. Scanned as-is, a real Beacon will usually match **nothing**: in eight public test Beacons, **0 of 8** original files matched a `core` rule, and **8 of 8** matched once a parser had removed that layer. **No match on an original payload file does not mean it is clean.** Memory dumps and scripts can be scanned directly.
+
+### 1. Install YARA and a Beacon parser
+
+| Tool | Windows | Linux | macOS |
+|:--|:--|:--|:--|
+| YARA | Download `yara-*-win64.zip` from [YARA releases](https://github.com/VirusTotal/yara/releases) and use `yara64.exe` in place of `yara` below | `sudo apt install yara` | `brew install yara` |
+| Beacon parser | `pip install dissect.cobaltstrike` | same | same |
+
+[`dissect.cobaltstrike`](https://github.com/fox-it/dissect.cobaltstrike) (Fox-IT) provides the `beacon-dump` and `beacon-xordecode` commands used below.
+
+### 2. Get the rules
+
 ```bash
-# Clone
 git clone https://github.com/struttonpigeon/cobaltstrike-yara.git
 cd cobaltstrike-yara
-
-# Scan a suspect file with every rule (index.yar includes all rule files)
-yara index.yar suspect.bin
-
-# Scan with a single rule file
-yara rules/cs_beacon_config.yar suspect.bin
-
-# Compile once, then scan a directory recursively
-yarac index.yar compiled.yarc
-yara -C -r compiled.yarc /path/to/samples/
-
-# YARA-X (run from the repo root so index.yar includes resolve)
-yr scan index.yar /path/to/samples/
-
-# Scan a memory dump
-yara index.yar process_dump.dmp
 ```
 
-> **Most original payload files will not match the config rules directly.** Decode first — see [Supported Inputs](#supported-inputs).
+### 3. Scan — pick the path that matches what you have
+
+**A. A suspected payload file (EXE, DLL, `.bin`): decode first, then scan**
+
+```bash
+# Quick answer: prints the Beacon config if the parser can find one.
+# It handles the outer XOR layer and tries every config XOR key, including custom ones.
+beacon-dump suspect.bin
+
+# Remove the outer XOR layer, then scan the decoded payload
+beacon-xordecode suspect.bin -o decoded.bin
+yara -w -t core index.yar decoded.bin
+```
+
+If `beacon-dump` prints a config, you are almost certainly looking at a Beacon — the YARA scan then adds watermark and hunt context. If `beacon-xordecode` cannot decode the file, it may use a different transform or not be a Beacon payload: rely on `beacon-dump`, or scan the original file for the non-config rules (stagers, reflective loader, Artifact Kit pipe).
+
+**B. A memory dump or a folder sweep: scan directly**
+
+```bash
+yara -w -t core index.yar process_dump.dmp
+yara -w -r -t core index.yar /path/to/folder
+```
+
+A folder sweep finds decoded or in-memory artefacts, not wrapped payloads — send any suspicious executable it turns up through path A.
+
+**C. Scripts (PowerShell, HTA, VBScript): scan directly**
+
+```bash
+yara -w -r index.yar /path/to/scripts
+```
+
+The script-loader rules are `hunt`-tagged and generic (they also match Empire, PowerSploit, etc.), so leave off `-t core` here.
+
+> **Handle suspected payloads only in an isolated analysis VM.** Decoding and scanning are static — never execute the file.
+
+### 4. Read the results
+
+Each output line is `RuleName path/to/file`. No output means no rule matched.
+
+| What matched | What to do |
+|:--|:--|
+| `core` rule | Treat as a likely Beacon config and investigate. |
+| `hunt` rule with severity `critical` or `high` | Strong lead; look for corroborating evidence. |
+| `hunt` rule with severity `medium` or `low` | Supporting evidence only — never alert on it alone (e.g. `SleepMask_VirtualProtect` matches 110 normal Windows files). |
+
+Flags used above: `-w` hides four known "may slow down scanning" warnings, `-t core` reports only the three high-confidence config rules, and `-r` recurses into folders. Drop `-t core` to see every hunt rule.
+
+### Other ways to run
+
+```bash
+# YARA-X (run from the repo root so index.yar includes resolve)
+yr scan index.yar /path/to/target
+
+# Compile once, then reuse
+yarac index.yar compiled.yarc
+yara -w -C -r compiled.yarc /path/to/folder
+
+# One self-contained rule file, for tools that do not follow include lines
+# (Velociraptor, Wazuh, osquery's yara table, THOR/Loki custom signatures)
+cat rules/*.yar > cobaltstrike_all.yar
+```
+
+On Windows PowerShell, build the single file with `Get-Content rules\*.yar | Set-Content cobaltstrike_all.yar`.
 
 ## Supported Inputs
 
@@ -64,7 +123,7 @@ What you scan matters more than which rule file you load. In eight public test B
 | Memory dump file | Config rules (while the raw block is still resident), `Named_Pipes_Default`, sleep-mask hunts | The parsed settings table a running Beacon builds on its heap is **not** matched. Whole-dump string co-occurrence can combine evidence from unrelated modules. |
 | Live process (`yara index.yar <pid>`) | Rules without `filesize` or MZ checks | Untested. `filesize` is undefined for a PID, so `ReflectiveLoader_*`, `ArtifactKit_Pipe_Format` and the `Generic_*` loaders cannot fire. |
 
-To get from an original payload to a decoded stage or config, use a maintained parser such as [`dissect.cobaltstrike`](https://github.com/fox-it/dissect.cobaltstrike) (its `beacon-dump` tool) or Didier Stevens' [`1768.py`](https://blog.didierstevens.com/2021/11/03/cobalt-strike-decoding/), then scan the decoded output. Do this statically, in an isolated analysis environment.
+To get from an original payload to a decoded stage or config, use a maintained parser — [`dissect.cobaltstrike`](https://github.com/fox-it/dissect.cobaltstrike) (`beacon-dump`, `beacon-xordecode`; commands in [Quick Start](#quick-start)) or Didier Stevens' [`1768.py`](https://blog.didierstevens.com/2021/11/03/cobalt-strike-decoding/) — then scan the decoded output. Payloads with additional transforms (for example the 4.12 base64/RC4 obfuscation layers) may need the parser's Python API rather than `beacon-xordecode`. Do this statically, in an isolated analysis environment.
 
 ## Rule Inventory
 
@@ -230,6 +289,10 @@ Contributions welcome. To add a rule:
 6. Open a PR with the sample hash(es) you validated against
 
 ## Changelog
+
+### 2026-11-10 — decode-first Quick Start
+
+- Quick Start rewritten around the real workflow: install YARA and `dissect.cobaltstrike`, decode payload files with `beacon-dump` / `beacon-xordecode` before scanning, scan dumps and scripts directly, start with `-t core`, and how to read the results. Added a single-file bundle command for tools that do not follow `include` lines.
 
 ### 2026-11-10 — review hardening
 
